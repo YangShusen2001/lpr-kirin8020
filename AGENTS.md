@@ -43,7 +43,7 @@ Single-context: one `CONTEXT.md` glossary plus `docs/adr/` at the repo root. See
 | `~/Desktop/Test/lpr-showcase` | 三个 ONNX 模型、77 项字符表、1000 张真值集、30+ 份原始日志、ADR-001~015、IEEE 论文稿 |
 | `~/lpr-harmony` → [lpr-harmony](https://github.com/YangShusen2001/lpr-harmony) | App 源码（`lpr_pipeline.cpp` 1084 行等）、CANN 转换脚本、`.ms`/`.om` 产物 |
 
-⚠️ **模型与 DDK 不在本仓库**（`.gitignore` 排除）：DDK 匿名可下，`.ms`/`.om` 由 ONNX 经文档化工具链重新产出。重建步骤见 [ADR-0008](docs/adr/0008-toolchain-and-sources-present-on-disk.md)。
+⚠️ **模型与 DDK 不在本仓库**（`.gitignore` 排除）：DDK 匿名可下，`.ms`/`.om` 由 ONNX 经文档化工具链重新产出。重建步骤见 [docs/notes/toolchain-and-sources-on-disk.md](docs/notes/toolchain-and-sources-on-disk.md)。
 
 ## 硬约束（写代码前必读）
 
@@ -52,4 +52,4 @@ Single-context: one `CONTEXT.md` glossary plus `docs/adr/` at the repo root. See
 3. **动态 batch 会导致构图失败** —— 转换时固定 batch = 1。
 4. **改端侧代码前先 `assembleHap` 干跑编译** —— `lpr_pipeline.cpp.yolov8_backup` 与 `lpr_pipeline_new_v2.cpp` 是遗留物，手工合并从未完成（A18 §5）。
 5. **OMG 输出路径不能含非 ASCII 字符** —— 与 hvigor 拒绝非 ASCII 工程路径（`00306003`）同类缺陷。
-6. **持续后台计算不被允许** —— `SystemLoadLevel` 有 8 档，官方要求 HIGH(3) 起停止无感服务。手机侧无通用计算长时任务类型（ADR-0009；**该结论未在 nova 14 Pro 真机验证**，见其边界声明）。
+6. **持续后台计算不被允许** —— `SystemLoadLevel` 有 8 档，官方要求 HIGH(3) 起停止无感服务。手机侧无通用计算长时任务类型（[notes/unattended-automation-on-device](docs/notes/unattended-automation-on-device.md)；**该结论未在 nova 14 Pro 真机验证**，见其边界）。

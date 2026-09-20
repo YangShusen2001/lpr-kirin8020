@@ -42,5 +42,5 @@ NPU 有两条通路：MindSpore Lite + NNRT delegate（高层）与 CANN Kit + `
 
 ## 未完成动作
 
-1. 用 `ShusenPaper/app` 的算子表征台构造 `.om` 版本，与 `.ms` 版本逐算子对撞——**前置条件已满足**：含 OMG 的 DDK 已在磁盘上且匿名可下（ADR-0008）。
-2. 若 DDK 不可得（当前**不成立**，见 ADR-0008），退化为**文档级对撞**：MS Lite 官方算子表（58/198 有 Kirin NPU 实现，且**全部 FP16-only**）vs CANN 官方 166 IR 算子清单。
+1. 用 `ShusenPaper/app` 的算子表征台构造 `.om` 版本，与 `.ms` 版本逐算子对撞——**前置条件已满足**：含 OMG 的 DDK 已在磁盘上且匿名可下（[notes/toolchain-and-sources-on-disk](../notes/toolchain-and-sources-on-disk.md)）。
+2. 若 DDK 不可得（当前**不成立**，见同上笔记），退化为**文档级对撞**：MS Lite 官方算子表（58/198 有 Kirin NPU 实现，且**全部 FP16-only**）vs CANN 官方 166 IR 算子清单。

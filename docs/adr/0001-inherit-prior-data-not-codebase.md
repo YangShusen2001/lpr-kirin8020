@@ -14,11 +14,11 @@
 |---|---|---|
 | `Desktop\ShusenPaper` | 项目一：麒麟 NPU 系统性表征 | git 30 提交；RQ1 完成；RQ2/RQ3/RQ4 未完成；**无 remote** |
 | `Desktop\Test\lpr-showcase` | 项目二：HyperLPR3 端侧车牌识别的**文档与证据层** | **无 git**；模型、证据、论文稿、1000 张真值集尚存 |
-| `C:\Users\26671\lpr-harmony` | 项目二：**App 源码与工具链层** | 1.7 GB / 13630 文件；**无 git**；完整可编译（见 ADR-0008） |
+| `C:\Users\26671\lpr-harmony` | 项目二：**App 源码与工具链层** | 1.7 GB / 13630 文件；**无 git**；完整可编译（见 [notes/toolchain-and-sources-on-disk](../notes/toolchain-and-sources-on-disk.md)） |
 
 新工程与它们是什么关系？
 
-> ⚠️ 本条初版误称 App 源码已丢失。**实际全在 `C:\Users\26671\lpr-harmony\`**——初版搜索只覆盖 `Desktop` / `D:\` / `Downloads`，漏了用户主目录。详见 ADR-0008 的更正记录。
+> ⚠️ 本条初版误称 App 源码已丢失。**实际全在 `C:\Users\26671\lpr-harmony\`**——初版搜索只覆盖 `Desktop` / `D:\` / `Downloads`，漏了用户主目录。详见 [notes/toolchain-and-sources-on-disk](../notes/toolchain-and-sources-on-disk.md) 的更正记录。
 
 ## 决策
 

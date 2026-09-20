@@ -46,4 +46,4 @@
 ## 未完成动作
 
 1. RQ4 协议设计：负载模式、时长、采样粒度、降频判据。
-2. 确认 App 能在无人干预下连续运行 ≥20 分钟（后台限制见 ADR-0009）。
+2. 确认 App 能在无人干预下连续运行 ≥20 分钟（后台限制见 [notes/unattended-automation-on-device](../notes/unattended-automation-on-device.md)）。

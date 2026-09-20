@@ -5,7 +5,8 @@ How the engineering skills should consume this repo's domain documentation when 
 ## Before exploring, read these
 
 - **`CONTEXT.md`** at the repo root — the glossary. This project has a **single context**; there is no `CONTEXT-MAP.md`.
-- **`docs/adr/`** — read ADRs that touch the area you're about to work in. Nine exist at project start (0001–0009); they are the authoritative record of every decision and every **failed route**.
+- **`docs/adr/`** — read ADRs that touch the area you're about to work in. Seven exist (0001–0007); they are the authoritative record of every decision and every **failed route**.
+- **`docs/notes/`** — non-decision records: environment facts, feasibility findings, and toolchain traps. Read them when you touch the toolchain or device automation.
 
 If any of these files don't exist, **proceed silently**. Don't flag their absence; don't suggest creating them upfront.
 
@@ -43,7 +44,7 @@ If your output contradicts an existing ADR, surface it explicitly rather than si
 
 > _Contradicts ADR-0003 (NPU 利用率不可测), but worth reopening because…_
 
-**Two ADRs in this repo contain corrections of earlier conclusions** (ADR-0005, ADR-0008). When you find a claim that looks wrong, read the ADR's 「更正记录」 section before assuming it's an oversight — the correction may already be recorded.
+**Records here contain corrections of earlier conclusions** — ADR-0005 (twice) and the note [toolchain-and-sources-on-disk](../notes/toolchain-and-sources-on-disk.md) (once). When you find a claim that looks wrong, read the 「更正记录」 section before assuming it's an oversight — the correction may already be recorded.
 
 ## Numbers discipline
 

@@ -150,7 +150,7 @@
 ### 转换链（模型不入库）
 
 - `.ms`：`converter_lite.exe` 2.6.0，PC 端，**无需华为账号**。三个模型已实测转换成功且 SHA256 与前期工程一致。
-- `.om`：CANN DDK 的 OMG，**必须用包装脚本**而非 `master/omg`；**输出路径不能含非 ASCII 字符**；不要传 `--target=omc`（会产出 `.omc` 而非 `.om` 且 `rc=0` 静默成功）；版本参数是 `--hiai_version` 不是 `--omg_version`。已在 WSL 实测复现（ADR-0008）。
+- `.om`：CANN DDK 的 OMG，**必须用包装脚本**而非 `master/omg`；**输出路径不能含非 ASCII 字符**；不要传 `--target=omc`（会产出 `.omc` 而非 `.om` 且 `rc=0` 静默成功）；版本参数是 `--hiai_version` 不是 `--omg_version`。已在 WSL 实测复现（[notes/toolchain-and-sources-on-disk](notes/toolchain-and-sources-on-disk.md)）。
 
 ### 数据
 
@@ -210,7 +210,7 @@ pipeline(rgbaBuffer, width, height) → { plates, stages, backends, thermal }
 
 - **RQ2 跨 SKU 扩展律**（9010/9020/9030）：依赖门店演示机，渠道不可控，降级为未来工作（ADR-0007）。
 - **端侧 LLM**：CANN LLM Engine 的 31 个符号全部 `deviceType=0100000` = **仅 2in1**，**全手机不可用**（X90 也不行）。三条闸门独立成立。已证伪，不投入。
-- **自动化操作其他应用**（如自动点金币）：设备侧注入点击三堵墙（系统接口 / PC-2in1 限定 / 无障碍 API 12 起废弃），**纯手机不可实现**（ADR-0009）。搁置。
+- **自动化操作其他应用**（如自动点金币）：设备侧注入点击三堵墙（系统接口 / PC-2in1 限定 / 无障碍 API 12 起废弃），**纯手机不可实现**（[notes/unattended-automation-on-device](notes/unattended-automation-on-device.md)）。搁置。
 - **训练或微调任何模型**：硬约束。
 - **多摄并发**：硬件与平台均不支持。
 - **GPU 加速叙事**：实测三个模型在 Vulkan 上都比 CPU 慢（小图提交开销主导）。GPU 那格只能写"通路成立且数值保真"，**不许写"GPU 加速"**。
