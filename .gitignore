@@ -1,0 +1,30 @@
+# --- 临时/试验产物（不入库）---
+_scratch/
+_hw_docs/
+_hw_nodes.csv
+_hw_tree.json
+_fetch.ps1
+
+# --- 工具运行痕迹 ---
+.mimosa/
+.playwright-mcp/
+
+# --- 构建产物 ---
+build/
+.cxx/
+oh_modules/
+node_modules/
+*.hap
+*.har
+
+# --- 大体积模型（按需重新转换，见 docs/adr/0008）---
+*.ms
+*.om
+*.omc
+*.onnx
+*.ncnn.bin
+
+# --- 系统 ---
+Thumbs.db
+desktop.ini
+.DS_Store
