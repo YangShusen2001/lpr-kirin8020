@@ -47,9 +47,9 @@ Single-context: one `CONTEXT.md` glossary plus `docs/adr/` at the repo root. See
 
 ## 硬约束（写代码前必读）
 
-1. **NPU 利用率不可测** —— 不是工具没找对，是平台没暴露。禁止任何利用率数字。证据只能是延迟差 + 逐算子落点 + 张量指纹（ADR-0003）。
+1. **NPU 利用率不可测** —— 依据是官方文档与工具清单（**未对设备做过逆向尝试**，见 ADR-0003 边界声明）。禁止任何利用率数字。证据只能是延迟差 + 逐算子落点 + 张量指纹（ADR-0003）。若有人通过 profiler 私有接口或内核态拿到 NPU 计数器，本条应被推翻并新建 ADR。
 2. **会话必须常驻** —— NNRT delegate 析构路径存在 cppcrash，不可反复创建/销毁。
 3. **动态 batch 会导致构图失败** —— 转换时固定 batch = 1。
 4. **改端侧代码前先 `assembleHap` 干跑编译** —— `lpr_pipeline.cpp.yolov8_backup` 与 `lpr_pipeline_new_v2.cpp` 是遗留物，手工合并从未完成（A18 §5）。
 5. **OMG 输出路径不能含非 ASCII 字符** —— 与 hvigor 拒绝非 ASCII 工程路径（`00306003`）同类缺陷。
-6. **持续后台计算不被允许** —— `SystemLoadLevel` 有 8 档，官方要求 HIGH(3) 起停止无感服务。手机侧无通用计算长时任务类型（ADR-0009）。
+6. **持续后台计算不被允许** —— `SystemLoadLevel` 有 8 档，官方要求 HIGH(3) 起停止无感服务。手机侧无通用计算长时任务类型（ADR-0009；**该结论未在 nova 14 Pro 真机验证**，见其边界声明）。
