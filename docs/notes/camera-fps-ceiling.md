@@ -173,3 +173,14 @@ E2EMATRIX RESULT role=det backend=nnrt_fp16  LANDED=NNRT:NPU…  match=0 code=�
    不能用于识别结果。
 
 **在此之前，论文中若出现 30 fps，必须同时出现上述错误结果。**
+
+
+**根因已查清（详见 `det-backend-alters-result.md`）：不是转换/配置 bug。**
+
+box 的取整坐标两次完全相同（`1751|747|1879|855`），但
+
+- `detConf`：0.7273 (CPU) vs 0.7230 (NPU) —— 亚像素坐标不同
+- `cropSum`：**2773473 (CPU) vs 2763123 (NPU)** —— 送进识别器的像素不同
+
+亚像素差异经**透视矫正**放大，把 `D` 读成 `0`。
+**fp32 也错**，所以不是精度问题 —— 重新转换模型大概率修不好。
