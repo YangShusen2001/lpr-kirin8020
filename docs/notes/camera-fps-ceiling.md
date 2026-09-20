@@ -19,7 +19,7 @@
 
 ---
 
-## 二、采用：全 NPU 档打到 30 fps
+## 二、采用：全 NPU 档打到 30 fps（⚠️ 但读错，见第六节）
 
 ```
 实时识别中 · 全 NPU
@@ -108,3 +108,68 @@ FPS SET analyze requested=60-60 active=60-60
 
 引用时必须标注：全 NPU 档下 det 的 `l2` 为 1121.6569（生产档为 1076.7692 量级），
 **两档的指纹不同**，说明确实换了计算路径，不是同一数据的重复测量。
+
+
+---
+
+## 六、⚠️ 全 NPU 档的 30 fps 是在「读错」的前提下达到的
+
+**这条没查之前，我差点把「全 NPU 档 30 fps」当成干净的性能结论写进论文。**
+
+同一批数据的 E2E 矩阵（开机自检，`evidence/e2e_matrix_det_backend.log`）显示：
+当**检测器**走 NNRT 时，参考图会被读错。
+
+| det 的 req | LANDED | 结果 | match |
+|---|---|---|---|
+| `cpu` | CPU | `苏ED5172` | **1** |
+| `gpu` | CPU（回落） | `苏ED5172` | **1** |
+| `kirin` | CPU（回落） | `苏ED5172` | **1** |
+| `nnrt` | NNRT:NPU… | **`苏E05172`** | **0** |
+| `nnrt_fp32` | NNRT:NPU… | **`苏E05172`** | **0** |
+| `nnrt_fp16` | NNRT:NPU… | **`苏E05172`** | **0** |
+
+三个 NNRT 变体**全部**读错，且错法一致 —— 在省位后**插入一个 `0`**，
+于是长度变成 **8 字符（非法，合法为 7/8 但结构不对）**。
+每个 (role, backend, LANDED) 组合重复多次都是同样结果，
+**这是该落点下的确定性行为，不是偶发抖动**。
+
+日志原文（`evidence/e2e_matrix_det_backend.log`）：
+
+```
+E2EMATRIX RESULT role=det backend=cpu        LANDED=CPU        match=1 code=苏ED5172
+E2EMATRIX RESULT role=det backend=nnrt       LANDED=NNRT:NPU…  match=0 code=苏E05172
+E2EMATRIX RESULT role=det backend=nnrt_fp32  LANDED=NNRT:NPU…  match=0 code=苏E05172
+E2EMATRIX RESULT role=det backend=nnrt_fp16  LANDED=NNRT:NPU…  match=0 code=苏E05172
+```
+
+即：**det 在 CPU 时 match=1，det 在 NNRT 时 match=0**。
+
+而相机页的「全 NPU」档**正是 det 走 NNRT** ——
+所以：**30 fps 是在识别错误的前提下达到的。**
+
+### 为什么前面几节没发现
+
+我只测了帧率和落点（`LANDED=` 显示 det 确实在 NPU 上，于是以为一切正常），
+**没有同步核对识别结果**。落点自证只能证明"跑在哪个后端上"，
+**不能证明"算对了"** —— 这正是 ADR-0003 里"指纹是报警器不是判据"的
+另一面：**落点正确 ≠ 结果正确**，两者都要看。
+
+### 因此「全 NPU 档 30 fps」不能单独引用
+
+正确的表述必须是：
+
+> 全 NPU 档（det/rec 均走 NNRT）可让流水线富余 9.9 ms/帧、达到相机 30 fps 上限；
+> 但**同一落点下参考图被读成 `苏E05172`（8 字符、非法），识别错误**。
+> 即 30 fps 与正确识别**不可兼得**（在本设备的当前模型与转换配置下）。
+
+### 待办（引用前必须补）
+
+1. 确认这是**检测器**的问题还是**转换配置**的问题 ——
+   三个 NNRT 变体错法一致，倾向于检测模型在 NNRT 上的数值行为差异，
+   而非 fp16/fp32 精度问题（因为 fp32 也错）。
+2. 在**多张图**上统计全 NPU 档的准确率，不能只用参考图一张。
+3. 若确认是转换问题，尝试重新转换 det 模型后复测；
+   若确认是 NNRT 的确定性数值差异，则该档位**只能用于性能上限测量**，
+   不能用于识别结果。
+
+**在此之前，论文中若出现 30 fps，必须同时出现上述错误结果。**
