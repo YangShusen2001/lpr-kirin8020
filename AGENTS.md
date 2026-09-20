@@ -1,0 +1,55 @@
+# 麒麟 8020 端侧异构推理与车牌识别流水线
+
+> 单一上下文（single-context）。词汇表见 `CONTEXT.md`，决策见 `docs/adr/`。
+
+## Agent skills
+
+### Issue tracker
+
+Issues and specs live as GitHub issues on `YangShusen2001/lpr-kirin8020` (private), driven by the `gh` CLI. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+The five canonical roles, label string equal to role name: `needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context: one `CONTEXT.md` glossary plus `docs/adr/` at the repo root. See `docs/agents/domain.md`.
+
+---
+
+## 这个项目是什么
+
+**麒麟 8020 端侧异构推理的落点自证方法学 + 算子覆盖边界**，以中文车牌识别四级流水线（检测 → 透视矫正 → 识别 → 判色）作为应用级案例（RQ3），并测持续负载热特性（RQ4）。
+
+论文主张与范围见 [ADR-0002](docs/adr/0002-thesis-landing-evidence-and-operator-coverage.md) 与 [ADR-0007](docs/adr/0007-scope-rq3-rq4-only.md)。
+
+## 设备与栈
+
+| 项 | 值 |
+|---|---|
+| 设备 | HUAWEI nova 14 Pro（MIA-AL00）· 麒麟 8020 · HarmonyOS 6.1.0.135 · API 24 |
+| 推理 | MindSpore Lite Kit 2.6.0 NDK → NNRT → NPU（`NPU_ohos.boot.hardware.kirin8020_v2_0`） |
+| GPU | Maleoon 920C，Vulkan 1.3.275（ncnn-Vulkan 唯一通路） |
+| 判色 | 像素测量（**不用**分类模型，见 ADR-0005） |
+
+## 前置资产（不在本仓库内）
+
+本工程继承两个前期工程的数据与结论，**代码库不延续**（ADR-0001）：
+
+| 位置 | 内容 |
+|---|---|
+| `~/Desktop/ShusenPaper` → [shusen-npu-characterization](https://github.com/YangShusen2001/shusen-npu-characterization) | L1 算子矩阵（36 算子）、L2 套件（5 轮 × 21 模型）、Roofline、INT8 形态结论、三缺陷提单链 |
+| `~/Desktop/Test/lpr-showcase` | 三个 ONNX 模型、77 项字符表、1000 张真值集、30+ 份原始日志、ADR-001~015、IEEE 论文稿 |
+| `~/lpr-harmony` → [lpr-harmony](https://github.com/YangShusen2001/lpr-harmony) | App 源码（`lpr_pipeline.cpp` 1084 行等）、CANN 转换脚本、`.ms`/`.om` 产物 |
+
+⚠️ **模型与 DDK 不在本仓库**（`.gitignore` 排除）：DDK 匿名可下，`.ms`/`.om` 由 ONNX 经文档化工具链重新产出。重建步骤见 [ADR-0008](docs/adr/0008-toolchain-and-sources-present-on-disk.md)。
+
+## 硬约束（写代码前必读）
+
+1. **NPU 利用率不可测** —— 不是工具没找对，是平台没暴露。禁止任何利用率数字。证据只能是延迟差 + 逐算子落点 + 张量指纹（ADR-0003）。
+2. **会话必须常驻** —— NNRT delegate 析构路径存在 cppcrash，不可反复创建/销毁。
+3. **动态 batch 会导致构图失败** —— 转换时固定 batch = 1。
+4. **改端侧代码前先 `assembleHap` 干跑编译** —— `lpr_pipeline.cpp.yolov8_backup` 与 `lpr_pipeline_new_v2.cpp` 是遗留物，手工合并从未完成（A18 §5）。
+5. **OMG 输出路径不能含非 ASCII 字符** —— 与 hvigor 拒绝非 ASCII 工程路径（`00306003`）同类缺陷。
+6. **持续后台计算不被允许** —— `SystemLoadLevel` 有 8 档，官方要求 HIGH(3) 起停止无感服务。手机侧无通用计算长时任务类型（ADR-0009）。
