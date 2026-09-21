@@ -23,9 +23,30 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 
-# tectonic 路径可被环境变量覆盖（换机器时不必改源码）。
-TECTONIC = Path(os.environ.get(
-    "TECTONIC", r"C:\Users\26671\AppData\Local\tectonic\tectonic.exe"))
+
+def _find_tectonic() -> Path:
+    """定位 tectonic，不把本机路径写进源码。
+
+    顺序：环境变量 `TECTONIC` → 常见安装位置 → 交给 PATH。
+    不硬编码用户名 —— 换机器时只需设环境变量。
+    """
+    env = os.environ.get("TECTONIC")
+    if env:
+        return Path(env)
+    home = Path(os.path.expanduser("~"))
+    cands = [
+        home / "AppData" / "Local" / "tectonic" / "tectonic.exe",  # winget 安装位
+        home / ".tectonic" / "tectonic.exe",
+        Path("/usr/local/bin/tectonic"),
+        Path("/usr/bin/tectonic"),
+    ]
+    for c in cands:
+        if c.exists():
+            return c
+    return cands[0]
+
+
+TECTONIC = _find_tectonic()
 
 TARGETS = {
     "en": ROOT / "paper" / "en",

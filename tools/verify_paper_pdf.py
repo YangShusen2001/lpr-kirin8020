@@ -12,12 +12,13 @@
 3. **页数与结构合理** —— IEEEtran conference 目标 8–10 页。
 
 用法：
-  <venv>/python.exe tools/verify_paper_pdf.py
-  <venv>/python.exe tools/verify_paper_pdf.py --find "26.9"   # 抽查某个串出现在第几页
+  <装了 PyMuPDF 的解释器> tools/verify_paper_pdf.py
+  <装了 PyMuPDF 的解释器> tools/verify_paper_pdf.py --find "26.9"   # 抽查某个串在第几页
 
-⚠️ 前置：需要 PyMuPDF。本机装在托管 venv：
-  C:/Users/26671/.workbuddy/binaries/python/envs/default/Scripts/python.exe
-若用默认 python 跑，会打印 backend=none / pages=0 —— 那是**工具问题，不是论文坏了**。
+⚠️ 前置：需要 PyMuPDF。若用没装它的解释器跑，会打印 backend=none / pages=0 ——
+那是**工具问题，不是论文坏了**。判据：`backend=none` ⇒ 换解释器；
+`backend=fitz` 且 `pages>0` 而断言失败 ⇒ 才是真问题。
+（本机 PyMuPDF 装在某个隔离 venv 里，不在系统 python 上。）
 """
 from __future__ import annotations
 
