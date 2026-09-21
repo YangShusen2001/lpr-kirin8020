@@ -21,14 +21,14 @@
 | 评审 | `/code-review` | 评审意见 | PR / issue 评论 |
 | 收尾 | `/handoff` | `handoff.md` 或 release tag | 仓库 |
 
-> ⚠️ **安装状态（2026-09-22 核实）**：以上命令**目前一个都没装**。
-> 用户级只装了 `grill-me` + `grilling` 两个（`mattpocock/skills` 的 `productivity/` 下）。
-> 其余在 `engineering/` 下（`grill-with-docs`、`research`、`to-spec`、`to-tickets`、
-> `triage`、`wayfinder`、`implement`、`code-review`、`tdd`、`diagnosing-bugs`、
-> `domain-modeling`、`codebase-design`、`prototype` 等），
-> 以及 `productivity/handoff`。该仓库自带安装器 `setup-matt-pocock-skills`。
+> ✅ **安装状态（2026-09-22 装齐）**：以上命令**已全部可用**。
+> 来源 `mattpocock/skills`，版本 pin `c55ee46073ed923f86ce59a5eb3b6d895095d1b7`，
+> 安全审计 **P2（安全）**。清单与审计记录见 `~/.workbuddy/mattpocock-skills-manifest.md`。
 >
-> **在装齐之前，按本表的工件约定执行，命令名当作阶段名使用。**
+> 注意两点：
+> 1. 多数 skill 带 `disable-model-invocation: true` —— **只能由用户显式调用**，我不会自动触发。
+> 2. `grill-me` 与 `grill-with-docs` 都是薄壳、都调 `grilling`；区别是后者**同时调
+>    `domain-modeling`**，会在访谈中顺手产出 ADR 与词汇表。**本项目用 `grill-with-docs`。**
 
 **三条硬纪律：**
 
