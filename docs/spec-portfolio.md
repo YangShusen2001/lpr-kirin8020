@@ -93,7 +93,7 @@
 | 访谈 | `/grill-with-docs` | 提问记录 | `docs/grilling-2026-09-22.md` |
 | 检索 | `/research` | 检索报告（附来源与可信度标注） | `docs/notes/gpu-official-verdict.md`、`on-device-decision-model-survey.md` 附录二 |
 | **规格** | **`/to-spec`** | **含 Problem / Solution / Scope 的 spec** | **本文** |
-| 拆票 | `/to-tickets` | 工单 + blocking edges | 待做（GitHub issues，见 `docs/agents/issue-tracker.md`） |
+| 拆票 | `/to-tickets` | 工单 + blocking edges | ✅ 已发布：GitHub issues **#13–#28**，索引见 [`docs/tickets-2026-09-22.md`](tickets-2026-09-22.md) |
 | 实现 | `/implement` | 每票一 commit，message 引用票号 | — |
 | 评审 | `/code-review` | 评审意见 | — |
 | 收尾 | `/handoff` | `handoff.md` 或 release tag | — |
