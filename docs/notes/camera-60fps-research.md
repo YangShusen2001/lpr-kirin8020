@@ -819,7 +819,7 @@ int32_t CaptureSession::SetFrameRateRange(const std::vector<int32_t>& frameRateR
 | **E** | **找 `CameraMode.HIGH_FPS` / `SceneMode.HIGH_FRAME_RATE` / `HighResolutionPhotoSession`** | **0%（已证伪）** | 第 2.5 / 第 4 题：`CameraMode` 不存在；`HIGH_FRAME_RATE` 只在内部枚举且**仅由 120/240 触发**；`HighResolutionPhotoSession` 不在公开 SDK | **死路。** 且注意 `HIGH_FRAME_RATE` 的设计意图是**慢动作录制**（HDI 注释 *"Slow motion mode"*），不是预览提速 |
 | **F** | **设 `setFrameRate(60,60)` 再试（任何分辨率）** | **0%（已多次证伪）** | 已有实测：`active=60-60` 但 arrive ~29.8（`camera-fps-ceiling.md` L69） | **死路。** 根因已在第 4.2 节代码级定位：`getActiveFrameRate` 只是回读，不是测量 |
 | **G** | **给会话加一条 `VideoOutput` 并把帧率设成与预览一致** | **<5%（推断）** | `camera-recording.md` L139 说"录像流已设置过范围帧率时，预览流帧率必须设置与其相同的范围帧率" —— 但这只是**一致性约束**，不是提速手段 | **基本死路。** 加 VideoOutput 只会多一条流抢带宽，`camera-fps-ceiling.md` L140–L145 已证伪"双流互抢"是瓶颈 |
-| **H** | **换亮场景重测（怀疑 `mCurMaxFps` 是曝光/热预算）** | **可能把 20 → 30，但拿不到 60** | 日志里 `mCurMaxFps` 有 `0→27`、`27→25`、`25→20`、`20→30` 四种走向，**说明它是动态量**。`camera-fps-ceiling.md` L143–L144 已观察到暗场景 30→15 砍半换曝光 | **不是 60fps 路径**，但对**稳定拿到 30** 有价值。建议在论文里把 `mCurMaxFps` 作为"传感器侧动态预算"的证据记录 |
+| **H** | **换亮场景重测（怀疑 `mCurMaxFps` 是曝光/热预算）** | **可能把 20 → 30，但拿不到 60** | 日志里 `mCurMaxFps` 有 `0→27`、`27→25`、`25→20`、`20→30` 四种走向，**说明它是动态量**。~~`camera-fps-ceiling.md` L143–L144 已观察到暗场景 30→15 砍半换曝光~~ ⚠️ **该引用是悬空的**（2026-09-21 核实：`camera-fps-ceiling.md` L143–144 讲的是检测器落点读错，且全文无 `15 fps` / `30→15`）——**「30→15 砍半换曝光」这条观察在本仓库找不到出处**，引用前须先补证据 | **不是 60fps 路径**，但对**稳定拿到 30** 有价值。建议在论文里把 `mCurMaxFps` 作为"传感器侧动态预算"的证据记录 |
 | **I** | **联系厂商 / 提单要 60fps 支持** | 未知 | 需厂商确认该 SKU 的 60fps 档位是"标称能力"还是"可交付能力" | 本仓库无法完成。**若论文需要 60fps 结论，这是唯一可能改变结论的路径** |
 
 ### 如何拿日志做路径 B（具体做法）
@@ -885,7 +885,7 @@ for (const p of cap.previewProfiles) {
 | 推断 | 依据 | 如何证伪 |
 |---|---|---|
 | 钳位发生在厂商 daemon 的 `setMaxFps()` | 框架侧 `setMaxFps` 命中 0；框架不校验不复查 | 拿到 daemon 源码/符号 |
-| `mCurMaxFps` 是动态曝光/热预算 | 日志有 `0→27`、`27→25`、`25→20`、`20→30` 四种走向；`camera-fps-ceiling.md` L143–L144 暗场景 30→15 | 控制光照/温度做 A/B |
+| `mCurMaxFps` 是动态曝光/热预算 | 日志有 `0→27`、`27→25`、`25→20`、`20→30` 四种走向；~~`camera-fps-ceiling.md` L143–L144 暗场景 30→15~~ ⚠️ **该引用悬空**（2026-09-21 核实，见上表 H 行） | 控制光照/温度做 A/B |
 | 换 VideoSession 会看到不同 profile 列表 | `preview_output.cpp` L494 用 `session->GetMode()`；`camera_manager.cpp` L2651–L2656 按 mode 取缓存 | 真机 A/B（路径 A） |
 | 60fps 档位是"标称"而非"实配" | `setMaxFps` 从不把上限抬到 30 以上 | 路径 B 的 hilog |
 
