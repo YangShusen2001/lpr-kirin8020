@@ -310,7 +310,133 @@ hdc shell hilog -x | grep -iE "cppcrash|CPP_CRASH|SIGSEGV|libnnrt"
 
 ---
 
-## 四条坑的横向对照
+## 坑 5 · CLI 构建无法签名：口令是 DevEco 加密串，而 hvigor 无条件解密
+
+### 现象
+
+纯命令行 `hvigorw assembleHap` 构建 HarmonyOS 应用时，
+**ArkTS 编译、打包全部成功**，只在最后一步签名失败，且报错信息会随口令的写法而变：
+
+```
+> hvigor ERROR: Failed :entry:default@SignHap...
+ERROR: 11014003 Init keystore failed
+Error Message: parseAlgParameters failed: ObjectIdentifier() -- data isn't an object ID (tag = 48)
+```
+
+把口令换成明文短串后，报错变成另外几条，像在挑口令格式：
+
+```
+00303116 Configuration Error
+Error Message: The length of the storePassword or keyPassword field ... is less than 32.
+00303117 Configuration Error
+Error Message: The length of the storePassword or keyPassword field ... is an even number.
+00308018 Unknown Error
+ENOENT: no such file or directory, stat '<keystore 目录>\material'
+```
+
+最容易误判的地方：**`-O0` 那条坑的症状是「构建成功但性能差」，
+这条坑的症状是「编译成功但签名失败」** —— 两者都会让人以为问题在自己的代码里，
+而实际上整个编译链是好的，卡住的只有签名。
+
+### 根因
+
+读 hvigor 自己的源码可以确认（`D:/IDE/DevEco_Studio/tools/hvigor/hvigor-ohos-plugin/src/utils/decipher-util.js`）：
+
+```js
+static decryptPwd(t, r, e) {
+  this.materialDir = t,
+  r.length < 32 && this._logger.printErrorExit("INVALID_DATA", ...),
+  r.length % 2 != 0 && this._logger.printErrorExit("INVALID_PASSWORD_LENGTH", ...);
+  const s = DecipherUtil.getKey(t, e),                    // 读 <keystore 目录>/material
+        _ = new Int8Array(Buffer.from(r, "hex"));         // 口令是被当 hex 解密的
+  return DecipherUtil.decrypt(s, _, e).toString("utf-8"); // AES-128-GCM
+}
+```
+
+三个事实由此确定：
+
+1. **`decryptPwd` 是无条件调用的** —— 没有「口令已是明文」的分支。
+   所以明文口令在 `assembleHap` 链路上**根本走不通**，不是格式没调对。
+2. 它要求 keystore 同目录下有 `material/{ac,ce,fd}` 三个材料目录，
+   由它们经 PBKDF2 派生出 AES 密钥。DevEco 自动签名时会把材料落在
+   `~/.ohos/config/material/`，而自己另建一个签名目录时不会有这个子目录。
+3. 口令串被当作 **AES-128-GCM 密文的 hex**。这解释了那几条「挑格式」的报错：
+   `≥32` 和 `偶数长度` 是对 hex 串合法性的检查，不是对密码强度的要求。
+   DevEco 写进 `build-profile.json5` 的口令是约 84 字符的十六进制串，看着像
+   带长度前缀的密文块，用 `keytool -list -storepass "<该串>"` 会得到
+   `keystore password was incorrect` —— 它压根不是密钥库的真实口令。
+
+**结论：不要试图在 CLI 里复现 DevEco 的加密口令，绕开 SignHap。**
+
+### 正确做法
+
+让 hvigor 只负责**编译与打包**，签名交给 `hap-sign-tool.jar` ——
+它的 `sign-app` 接**明文口令**，不经过 `DecipherUtil`。
+
+本工程把这条路径固化成两个脚本（`tools/` 下，均已实测可重复执行）：
+
+```bash
+bash tools/make_signing_material.sh   # 生成签名材料，只需跑一次
+bash tools/sign_hap.sh                # 签 entry 的 unsigned HAP
+
+# 交付到桌面：
+LPR_HAP_OUT="<桌面路径>/lpr-demo-signed.hap" bash tools/sign_hap.sh
+```
+
+`make_signing_material.sh` 用的是 DevEco 自带的标准调试根材料
+（`sdk/default/openharmony/toolchains/lib/OpenHarmony.p12`，口令固定 `123456`），
+所以**不需要申请证书、不需要 DevEco 账号**：
+
+| 步骤 | 动作 |
+|---|---|
+| 1 | 从 `OpenHarmonyProfileRelease.pem` 拆出 3 张 CA 证书（Root / Application CA / Profile Release CA） |
+| 2 | 用 `UnsgnedDebugProfileTemplate.json` 改写 `bundle-name` 为本应用包名，放宽有效期 |
+| 3 | `sign-profile` 签发 `lpr-debug-profile.p7b` |
+| 4 | `generate-keypair` + `importkeystore` 得到含 CA 私钥与本应用私钥的工作库 |
+| 5 | `generate-app-cert -outForm certChain` 签发三级应用证书链 |
+
+两个容易踩的小细节：
+
+- **包名必须一致**。profile 里的 `bundle-name` 要与 `AppScope/app.json5` 的
+  `bundleName` 逐字相同，否则真机拒装。脚本里做了显式断言。
+- **`generate-app-cert` 要求签发者私钥与申请者密钥在同一个密钥库**。
+  分成两个 `.p12` 会报 `KeyAlias {...} is not exist in {...}` ——
+  所以要有 `importkeystore` 合并这一步。
+
+### 可复现的最小验证
+
+签名后**不要把「命令没报错」当成成功**，要独立验签并核对包名：
+
+```bash
+JAVA="D:/IDE/DevEco_Studio/jbr/bin/java.exe"
+TOOL="D:/IDE/DevEco_Studio/sdk/default/openharmony/toolchains/lib/hap-sign-tool.jar"
+
+# (a) 验签：期望 Digest verify result: true + verify-app success
+"$JAVA" -jar "$TOOL" verify-app -inFile <signed.hap> \
+  -outCertChain /tmp/chain.cer -outProfile /tmp/profile.p7b
+
+# (b) 核对签名后 profile 里的包名 == AppScope 里的包名
+python -c "
+import re
+s=open('/tmp/profile.p7b','rb').read()
+print(re.search(rb'\"bundle-name\"\s*:\s*\"([^\"]+)\"',s).group(1).decode())"
+
+# (c) 正面证据：unsigned 与 signed 是两个文件、signed 更大
+ls -la <out 目录>/entry-default-*.hap
+```
+
+**判据**：`verify-app success` **且** profile 包名与 AppScope 一致。
+只看 `sign-app success` 不够 —— 签出一个包名不匹配的 HAP，
+安装时才失败，而那时已经离开构建环境了。
+
+> ⚠️ **一个误导性极强的旁证**：`build.sh` 记录过「新 unsigned.hap + 旧 signed.hap」
+> 这种组合，原因是签名失败但打包成功。**看到 signed.hap 存在不等于签名成功，
+> 要看它的时间戳和验签结果。** `sign_hap.sh` 在签名前会先删掉旧产物，
+> 就是为了不留这种假证据。
+
+---
+
+## 五条坑的横向对照
 
 | # | 坑 | 失败形态 | 最坑的地方 | 验证成本 |
 |---|---|---|---|---|
@@ -318,11 +444,18 @@ hdc shell hilog -x | grep -iE "cppcrash|CPP_CRASH|SIGSEGV|libnnrt"
 | 2 | 非 ASCII 路径 | 报错**指向参数不指向路径** | 以为参数传错了，反复改参数 | 低 |
 | 3 | 动态 batch | **构图阶段直接失败** | 与「动态形状只是慢一点」的直觉相反 | 低（无需设备） |
 | 4 | 会话析构 cppcrash | **间歇**，不是每次 | 像「偶发/设备问题」，难以稳定复现 | **高（真机+时序）** |
+| 5 | CLI 签名口令 | 编译打包**全成功**，只签名失败 | 报错在「挑口令格式」，像自己写错了 | 低（无需设备） |
 
-**共同主题：这四条里有三条是「静默失败」或「错因报错」。**
+**共同主题：这五条里有四条是「静默失败」或「错因报错」。**
 在嵌入式工具链上工作，**「没有报错」不等于「配置正确」** ——
 所以每条都必须配一个**独立于构建过程的验证手段**
-（`#1` 读 `build.ninja`、`#2` 看产物 magic/字节数、`#3` 对比两份转换结果）。
+（`#1` 读 `build.ninja`、`#2` 看产物 magic/字节数、`#3` 对比两份转换结果、
+`#5` 独立验签 + 核对包名）。
+
+**`#1` 与 `#5` 是一对值得对照的坑**：都是「编译链没问题、但你不能相信它」。
+`#1` 的产物能装能跑、只是慢；`#5` 的产物连装都装不上。
+两者的共同解法是同一条：**去读工具的实际行为（`build.ninja` / hvigor 源码），
+而不是相信自己抄的参数**。
 
 ---
 
