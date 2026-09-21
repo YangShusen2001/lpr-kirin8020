@@ -491,3 +491,122 @@ NNRt 对接开发指导 (`neural-network-runtime-guidelines`)
    演示前必须真机 ping 通 + 准备端侧规则引擎兜底；② waitlist 拿 key 有时延。
 6. **与论文关系**：Jev 在云，与本论文的端侧主张不冲突 —— 手机侧做**感知**，
    恰好证明「感知下沉端侧 + 决策外置」的架构，反而可作为 RQ3 的应用叙事。
+
+---
+
+## 附录二（2026-09-22）：Jev 做 Browser Use / Computer Use 的可行性
+
+**起因**：用户想用 Jev 做 Browser Use / Computer Use。原话：
+
+> 现在的 Computer Use 只有 Codex 比较好用，其他都是**截图然后再丢回给大模型，
+> 让大模型输出截图的坐标，再模拟点击，就非常非常慢**。我真的是用吐了。
+
+**结论**：**能做，但用户诊断的瓶颈找错了地方；而且手机端方向不成立。**
+
+### 1. Jev 官方明确不做感知
+
+官方文档原文：*"Jev currently accepts text input only… Images, audio, and video are
+not supported (yet)"*。[官方] `docs.typesafe.ai/concepts/system-one`
+
+TypeSafe 自己的立场（Tom's Hardware 引述）：「Jev 的强项不是像 agent 那样行动或做宽泛
+推理，开放式任务更适合 LLM」。[官方/媒体]
+
+⇒ **Jev 是「决策函数」，不是感知模型，也不是规划器。** HN 上有人说「这就是个
+zero-shot classifier」，Almeida 回「exactly right!」。[社区]
+
+### 2. 但确实有人把它接进 browser loop 了
+
+**APUS AI Lab 的 `fast-browser-use`**（MIT）：复现 Jev「跳过自回归解码、隐状态直接打分」
+的逻辑，用本地 Qwen3.5-9B 做**单 Token Logits 决策**——把页面**真实可见可点元素**整理成
+候选元组 `(CLICK, btn_7)`，模型**只在候选集里单选**，从机制上消灭「选择器幻觉」。
+[源码] `github.com/APUS-AI-Lab/fast-browser-use`
+
+这是现成的参考实现。
+
+### 3. ⚠️ 关键纠正：截图**不是**瓶颈
+
+OSWorld-Human 论文（arXiv 2506.16042, MLSys 2026）实测的耗时占比 [论文]：
+
+| 阶段 | Agent S2 | GTA1 |
+|---|---|---|
+| 规划 planning | **53.5%** | **74.6%** |
+| 反思 reflection / 判断 | **33.6%** | **22.5%** |
+| **截图 + 动作执行** | **约 3.3%** | **约 1.1%** |
+
+**规划 + 反思合计 87–97%，截图与键鼠事件只占几个百分点。**
+
+补充量级：第 t 步要背前 t−1 步截图，**任务后期单步耗时可达初期 3 倍**；
+最优 agent 步数仍是人类参考轨迹的 **1.4–2.7 倍**。
+本地 UI-TARS-2B 单次元素定位 ~1.2 s、读全屏文字 ~3 s；Playwright MCP 30 任务
+468–493 s，browser-use 21 任务 1870 s。[社区/源码]
+
+⇒ **真正该优化的是「减少模型调用次数 + 压缩上下文」，不是「换更快的点击」。**
+用户「用吐了」的那个慢，主因是**每一步都在重新规划**。这恰好是 Jev 的甜区
+（70–500 ms、$42/B input）。
+
+### 4. 不用视觉的路径：Browser 成熟，手机端堵死
+
+**Browser（成熟且是主流）**：browser-use（DOM + a11y 树，10 万+ stars）、
+Playwright MCP（a11y snapshot，简单页 ~200–400 token）、Stagehand、Vercel agent-browser
+—— **全部收敛到 accessibility tree**。
+
+速度：整页 a11y 树 **2.4 KB** vs 同页 1000px JPEG **16 KB** → **6–10×**；
+且 ref（`link "submit" @e12`）比像素坐标稳定。[社区]
+
+> ⚠️ **但要诚实**：WebVoyager 原论文里，**纯文本（a11y 树）只有 39–40.1%**，
+> 多模态 55.7–59.1%。CHI 2026 还发现限制为纯键盘（完全依赖结构）时成功率 78%→42%。
+> [论文] **DOM 方案快、便宜，但只在结构良好的页面可靠。**
+
+**HarmonyOS 手机端：方向不成立**（本次重新核实，旧结论仍成立且更严）：
+
+- `AccessibilityExtensionAbility` 的 `onConnect` / `onDisconnect` / `onAccessibilityEvent` /
+  `onKeyEvent` **全部自 API 12 起 deprecated**。[官方]
+- 更关键：`AccessibilityExtensionContext` 的 `getWindowRootElement`、`getFocusElement`、
+  `injectGesture`（API 10 起废弃）、`injectGestureSync`、`AccessibilityElement.performAction`
+  （即「注入点击」）**全部自 API 12 起 deprecated，且同页未给出未废弃的替代接口**。[官方]
+- 华为开发者问答回复原话：「**由于安全原因，无障碍的节点查询、模拟操作等能力不再对三方
+  开放了**」；「替代接口仅限系统应用使用」。[社区]
+- `ohos.permission.ACCESSIBILITY` 属受限权限，需 AGC 逐个审核 + 视频说明。[官方]
+- **唯一旁路是 PC 侧 `hdc shell uitest dumpLayout`** —— 官方支持导出任意前台应用的
+  控件树（`type/text/id/bounds/clickable`），但 `uitest_server` 是特权守护进程，
+  **不是纯手机端三方应用能力**，属**调试态**方案。[官方/源码]
+
+**Windows（CPU-only，用户的实际环境）**：UI Automation / pywinauto 能读任意应用的 UIA 树
+并注入点击，是**最现实的 no-vision 路径**。[?] 建议实测。
+
+### 5. 建议架构与成熟度
+
+```
+感知层(代码) → 结构化状态(代码) → 决策层(Jev/LLM) → 动作层(代码)
+```
+
+| 层 | 职责 | 可行工具 |
+|---|---|---|
+| 感知 | 把界面变成**文本**，绝不出图 | Browser：Playwright a11y snapshot；Windows：pywinauto/UIA；手机：`hdc uitest dumpLayout`（PC 侧） |
+| 结构化 | 候选动作元组 `(CLICK, btn_7)`、元素表、目标 URL/标题 | 纯代码，含可见性/遮挡/过期校验 |
+| 决策 | 选动作 / 判完成 / 判元素匹配 | **Jev**（Choice/Noul/Score，70–500 ms）；长程规划交给 LLM |
+| 动作 | 执行 + 事后校验 | Playwright click(ref)、UIA invoke；**用精确 URL/标题断言，不信模型自报的 DONE** |
+
+**成熟度**：
+
+| 目标 | 判断 |
+|---|---|
+| **Browser Use + Jev** | ✅ **可落地**（需自研 harness） |
+| **Windows Computer Use（CPU-only）** | 🟡 需自研一些 |
+| **HarmonyOS 手机端 Computer Use** | ❌ **不成立**（第三方 on-device） |
+
+**最小可验证原型**：本机 Chrome 起 `--remote-debugging-port` → 抓 a11y snapshot →
+转候选元组文本 → 调 Jev `Choice` 选元素 + `Noul` 判完成 → Playwright 按 ref 点击 → 循环。
+**只度量三个数**：单步端到端耗时、Jev 单步耗时、任务步数 vs 人类基线。
+
+### 6. 与本项目的关系
+
+麒麟 NPU **跑不了 transformer**（LayerNorm / EmbeddingLookup 无 Kirin NPU 实现），
+⇒ **端侧 VLM 直接排除**。这反而**强化**了「树优先、视觉兜底」的路线。
+
+而**本项目的车牌识别恰好就是那个「视觉兜底层」**（端侧 OCR），
+只在非文本界面（canvas / 图像按钮）才需要它。
+
+⇒ **这件事值得做，但它是一个独立的 Browser Use 项目，不应塞进车牌识别。**
+建议与「红果/抖音自动化」合并成同一个方向的下一步规划。
+
