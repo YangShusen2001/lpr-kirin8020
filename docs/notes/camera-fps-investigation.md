@@ -139,12 +139,12 @@ SKIP_PREVIEW_DISPLAY = false   （实验已回退）
 构建（**必须带 `buildMode=release`**）：
 
 ```powershell
-cd C:\Users\26671\lpr-kirin8020-app\LprDemo
-$env:JAVA_HOME='D:\IDE\DevEco_Studio\jbr'
-$env:PATH='D:\IDE\DevEco_Studio\jbr\bin;' + $env:PATH
-$env:DEVECO_SDK_HOME='D:\IDE\DevEco_Studio\sdk'
+cd <REPO>/lpr-kirin8020-app\LprDemo
+$env:JAVA_HOME='<JBR>'
+$env:PATH='<JBR>\bin;' + $env:PATH
+$env:DEVECO_SDK_HOME='<SDK>'
 Remove-Item Env:\NODE_OPTIONS -ErrorAction SilentlyContinue
-& 'D:\IDE\DevEco_Studio\tools\hvigor\bin\hvigorw.bat' --mode module `
+& '<HVIGOR>\bin\hvigorw.bat' --mode module `
     -p product=default -p buildMode=release assembleHap --no-daemon
 ```
 

@@ -7,9 +7,9 @@ classifier, which is NOT the production path.
 import os, sys, glob, collections
 import numpy as np
 
-BASE = r"C:\Users\26671\Desktop\Test\lpr-showcase"
+BASE = r"<PRIOR_WORK>/lpr-showcase"
 sys.path.insert(0, os.path.join(BASE, "tools"))
-GREEN = r"C:\Users\26671\Desktop\车牌识别\_scratch\green"
+GREEN = r"<REPO>/lpr-kirin8020\_scratch\green"
 
 import hlpr_reference as H
 

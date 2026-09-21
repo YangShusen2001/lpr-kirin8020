@@ -2,7 +2,7 @@
 
 **日期**：2026-09-22
 **设备**：HUAWEI nova 14 Pro（MIA-AL00）· 麒麟 8020 · HarmonyOS 6.1.0.135 · API 24
-**SDK**：`D:\IDE\DevEco_Studio\sdk\default\`（`sdk-pkg.json`：apiVersion 24 / HarmonyOS 6.1.1 / 6.1.1.125 Release）
+**SDK**：`<SDK>\default\`（`sdk-pkg.json`：apiVersion 24 / HarmonyOS 6.1.1 / 6.1.1.125 Release）
 **触发**：设备报 `getSupportedFrameRates()` = `[1-30, 60-60]`，`setFrameRate(60,60)` 被接受、
 `getActiveFrameRate()` 回报 `60-60`，但实测到达率恒为 ~29.8–30 fps。
 
@@ -35,7 +35,7 @@
 
 #### 1.1 API 面（本地 SDK，权威）
 
-`D:\IDE\DevEco_Studio\sdk\default\openharmony\ets\api\@ohos.multimedia.camera.d.ts`
+`<SDK>/openharmony\ets\api\@ohos.multimedia.camera.d.ts`
 
 `FrameRateRange` 定义在 **L289–L341**（`@typedef` 块 L289–L303，`interface` L304–L341），
 两个字段都 `readonly`，`@since 10`：
@@ -367,7 +367,7 @@ enum SceneMode {
 
 #### 3.1 本地实际存在的文件
 
-`D:\IDE\DevEco_Studio\sdk\default\openharmony\native\sysroot\usr\include\ohcamera\`
+`<SDK>/openharmony\native\sysroot\usr\include\ohcamera\`
 （**目录确实叫 `ohcamera`**）：
 
 | 文件 | 字节 |
@@ -490,7 +490,7 @@ typedef enum Camera_SceneMode {
 
 ### 第 4 题：ArkTS 面是否有我们没用的帧率相邻接口
 
-对 `D:\IDE\DevEco_Studio\sdk\default\openharmony\ets\api\@ohos.multimedia.camera.d.ts`（9,605 行）
+对 `<SDK>/openharmony\ets\api\@ohos.multimedia.camera.d.ts`（9,605 行）
 逐符号穷举结果：
 
 | 符号 | 出现位置（行号） | 说明 |
@@ -525,7 +525,7 @@ typedef enum Camera_SceneMode {
 
 #### 4.1 我们**实际**用的是哪个 session —— 已核实
 
-`C:\Users\26671\lpr-kirin8020-app\LprDemo\entry\src\main\ets\pages\CameraPage.ets` **L667**：
+`<REPO>/lpr-kirin8020-app\LprDemo\entry\src\main\ets\pages\CameraPage.ets` **L667**：
 
 ```ts
 const sess: camera.PhotoSession = mgr.createSession(camera.SceneMode.NORMAL_PHOTO);
@@ -916,7 +916,7 @@ for (const p of cap.previewProfiles) {
 ### 4.5 【2026-09-21 补充】本地 `HuaweiDocs` 语料复核 + 一条新约束
 
 后续一轮（`camera-npu-headroom.md`）在本地官方语料
-`C:\Users\26671\Desktop\HuaweiDocs\cn`（8877 篇 `.md`，与线上同源）上复核了本文第 1c 题，
+`<DOCS_CORPUS>\cn`（8877 篇 `.md`，与线上同源）上复核了本文第 1c 题，
 并**新发现一条与本文相关的官方约束**：
 
 - **第 1c 题的直接复核（不是转述）**：本地 SDK

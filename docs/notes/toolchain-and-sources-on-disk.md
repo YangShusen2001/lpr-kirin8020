@@ -13,7 +13,7 @@
 
 **源码、工具链、模型产物全部在磁盘上，无需重新获取；CANN 侧的真机逐算子对撞可以做。**
 
-实际位置（`C:\Users\26671\lpr-harmony\`，**不在 `Desktop` 下**）：
+实际位置（`<PRIOR_WORK>/lpr-harmony\`，**不在 `Desktop` 下**）：
 
 | 类别 | 内容 |
 |---|---|
@@ -44,7 +44,7 @@ bash ddk/tools/tools_omg/omg --model X.onnx --framework 5 --output out/om_X \
 
 - ADR-0004 的"文档级对撞"升级为**真机逐算子对撞**：把 `ShusenPaper/app` 的 50 个算子模型各转一份 `.om`，与 `.ms` 版本在真机上同输入对撞。
 - **CANN 转换链已于 2026-09-20 实测复现**（`_scratch/convert_om_real.sh`）：三个生产模型全部重新转出，`rc=0`，magic 均为 `IMOD`（`49 4d 4f 44`），**字节数与 09-18 原件完全一致**（cls 841728 / dethead 1010950 / rec 5041253）。SHA256 不同——`.om` 内嵌时间戳与路径元数据，**尺寸一致才是可比证据**。
-- 生产 `.ms` 转换链无需华为账号：`converter_lite.exe` 2.6.0 在 `D:\Tools\mindspore-lite\mindspore-lite-2.6.0-win-x64\tools\converter\converter\`，三个模型已实测转换成功且 SHA256 与项目自带 `.ms` 一致。
+- 生产 `.ms` 转换链无需华为账号：`converter_lite.exe` 2.6.0 在 `<MSLITE_DIR>\mindspore-lite-2.6.0-win-x64\tools\converter\converter\`，三个模型已实测转换成功且 SHA256 与项目自带 `.ms` 一致。
 
 ## OMG 的四个真实陷阱（全部实测踩到）
 
@@ -64,7 +64,7 @@ bash ddk/tools/tools_omg/omg --model X.onnx --framework 5 --output out/om_X \
 
 ## 更正记录
 
-**2026-09-20 首次更正**。本笔记的前身结论是"App 源码全盘搜不到、DDK 也丢了、只能退化为文档级对撞"。该结论基于一次**范围不完整的搜索**——只扫了 `C:\Users\26671\Desktop`、`D:\`、`C:\Users\26671\Downloads`，**漏掉了用户主目录 `C:\Users\26671\` 本身**，而工程恰好在 `C:\Users\26671\lpr-harmony\`。
+**2026-09-20 首次更正**。本笔记的前身结论是"App 源码全盘搜不到、DDK 也丢了、只能退化为文档级对撞"。该结论基于一次**范围不完整的搜索**——只扫了 `<HOME>\Desktop`、`D:\`、`<HOME>\Downloads`，**漏掉了用户主目录 `<HOME>\` 本身**，而工程恰好在 `<PRIOR_WORK>/lpr-harmony\`。
 
 教训与 ADR-015 同构：**"没搜到"不等于"不存在"**。声明一个资产丢失前，必须先穷尽搜索路径并写明搜索范围。
 

@@ -2,8 +2,8 @@
 
 **日期**：2026-09-23
 **设备**：HUAWEI nova 14 Pro（MIA-AL00）· 麒麟 8020 · HarmonyOS 6.1.0.135 · API 24
-**SDK**：`D:\IDE\DevEco_Studio\sdk\default\`（apiVersion 24 / HarmonyOS 6.1.1）
-**语料**：`C:\Users\26671\Desktop\HuaweiDocs\cn`（8877 篇，与 developer.huawei.com 同源）
+**SDK**：`<SDK>\default\`（apiVersion 24 / HarmonyOS 6.1.1）
+**语料**：`<DOCS_CORPUS>\cn`（8877 篇，与 developer.huawei.com 同源）
 **前序**：`camera-60fps-research.md`（2026-09-22，本轮不推翻其任何结论，只补增量与一处口径澄清）
 
 **一句话结论**：`hilog_recovered.txt` 里的 `fps=43~58` 是**单帧处理耗时的倒数（流水线吞吐能力）**，
@@ -40,7 +40,7 @@
 
 #### a.1 这行日志是怎么算出来的（代码级）
 
-日志产生方是 `C:\Users\26671\lpr-harmony\LprDemo\entry\src\main\ets\pages\CameraPage.ets`
+日志产生方是 `<PRIOR_WORK>/lpr-harmony\LprDemo\entry\src\main\ets\pages\CameraPage.ets`
 （应用包名 `com.shusen.lprdemo`，与 hilog 中的 tag `LprCamera` 一致）：
 
 ```ts
@@ -144,7 +144,7 @@ hilog.479（gear=1，处理已热身），同期到达率就是上面那几行 ~
 
 #### c.2 用 `OH_Camera**` NDK 直接建 Session
 
-`D:\IDE\...\ohcamera\camera.h` L165-180：`Camera_SceneMode` 只有
+`<SDK>/...\ohcamera\camera.h` L165-180：`Camera_SceneMode` 只有
 `NORMAL_PHOTO=1 / NORMAL_VIDEO=2 / SECURE_PHOTO=12` —— 与 ArkTS 完全一致。
 `preview_output.h` L269/L283/L297 与 `video_output.h` L265/L292/L306 的帧率三件套
 （GetSupportedFrameRates / SetFrameRate / GetActiveFrameRate）逐函数对应 ArkTS。
@@ -279,16 +279,16 @@ displaysync-overview.md），且文档明确「开发者设置的期望帧率值
   不排除个别同义表述（如「高刷」）漏网 —— 但相机语境下主词已覆盖。
 - hilog_recovered.txt 是从损坏的 hilog gzip 中恢复的**混叠文本**（App 行与系统行交错），
   行号以恢复文件为准；App 侧日志口径以 CameraPage.ets 源码为准（一手）。
-- 引用文件清单：`C:\Users\26671\lpr-harmony\LprDemo\entry\src\main\ets\pages\CameraPage.ets`、
-  `D:\IDE\DevEco_Studio\sdk\default\openharmony\ets\api\@ohos.multimedia.camera.d.ts`、
-  `D:\IDE\DevEco_Studio\sdk\default\openharmony\native\sysroot\usr\include\ohcamera\{camera,preview_output,video_output}.h`、
-  `C:\Users\26671\Desktop\HuaweiDocs\cn\harmonyos-guides\` 下 camera-framerate / camera-preview /
+- 引用文件清单：`<PRIOR_WORK>/lpr-harmony\LprDemo\entry\src\main\ets\pages\CameraPage.ets`、
+  `<SDK>/openharmony\ets\api\@ohos.multimedia.camera.d.ts`、
+  `<SDK>/openharmony\native\sysroot\usr\include\ohcamera\{camera,preview_output,video_output}.h`、
+  `<DOCS_CORPUS>\cn\harmonyos-guides\` 下 camera-framerate / camera-preview /
   camera-recording / camera-setframerate-native / avscreencapture-screen-recording-c /
   using-avscreencapture-arkts / displaysync-overview 各 .md、
-  `C:\Users\26671\Desktop\HuaweiDocs\cn\harmonyos-references\` 下 arkts-apis-camera-videosession /
+  `<DOCS_CORPUS>\cn\harmonyos-references\` 下 arkts-apis-camera-videosession /
   gameservice-gameperformance / servicecollaboration-collaborationcamera /
   capi-native-avscreen-capture-h / capi-native-avscreen-capture-base-h 各 .md、
-  `C:\Users\26671\Desktop\车牌识别\_scratch\hilog_recovered.txt`。
+  `<REPO>/lpr-kirin8020\_scratch\hilog_recovered.txt`。
 
 ---
 

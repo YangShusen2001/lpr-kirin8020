@@ -411,7 +411,7 @@ ADR-0003 与 `AGENTS.md` 硬约束 1：NPU 利用率**物理上不可读** —�
 
 ## 四、查官方文档后的补充（本地 `HuaweiDocs` 语料 + 在线文档）
 
-本地语料：`C:\Users\26671\Desktop\HuaweiDocs\cn`（8877 篇 `.md`，含
+本地语料：`<DOCS_CORPUS>\cn`（8877 篇 `.md`，含
 `harmonyos-guides` / `harmonyos-references` / `design-guides`，与线上文档同源同步）。
 在线 `developer.huawei.com/consumer/cn/doc/HarmonyOS-Guides/camera-kit` 是 SPA，
 正文经 POST `documentPortal/getDocumentById` 注入，`web_fetch` 只拿到「文档中心」——
@@ -438,7 +438,7 @@ ADR-0003 与 `AGENTS.md` 硬约束 1：NPU 利用率**物理上不可读** —�
 但未暴露给应用」。本轮**直接在本地 SDK 里复核**：
 
 ```
-D:\IDE\DevEco_Studio\sdk\default\openharmony\ets\api\@ohos.multimedia.camera.d.ts
+<SDK>/openharmony\ets\api\@ohos.multimedia.camera.d.ts
   L2493  enum SceneMode {
   L2508      NORMAL_PHOTO = 1,
   L2527      NORMAL_VIDEO = 2,
@@ -662,12 +662,12 @@ enum SystemPressureLevel {          // @since 20，本地 SDK L6421 确认存在
 
 ```powershell
 # 1) 构建（必须带 buildMode=release）
-cd C:\Users\26671\lpr-kirin8020-app\LprDemo
-$env:JAVA_HOME='D:\IDE\DevEco_Studio\jbr'
-$env:PATH='D:\IDE\DevEco_Studio\jbr\bin;' + $env:PATH
-$env:DEVECO_SDK_HOME='D:\IDE\DevEco_Studio\sdk'
+cd <REPO>/lpr-kirin8020-app\LprDemo
+$env:JAVA_HOME='<JBR>'
+$env:PATH='<JBR>\bin;' + $env:PATH
+$env:DEVECO_SDK_HOME='<SDK>'
 Remove-Item Env:\NODE_OPTIONS -ErrorAction SilentlyContinue
-& 'D:\IDE\DevEco_Studio\tools\hvigor\bin\hvigorw.bat' --mode module `
+& '<HVIGOR>\bin\hvigorw.bat' --mode module `
     -p product=default -p buildMode=release assembleHap --no-daemon
 
 # 2) 装（先卸旧 App，同 bundleName 会混证据）
@@ -675,7 +675,7 @@ hdc uninstall com.shusen.lprdemo
 hdc install -r entry\build\default\outputs\default\entry-default-signed.hap
 
 # 3) 跑协议（档位由 uitest 外部驱动；自动处理权限弹窗）
-cd C:\Users\26671\lpr-kirin8020-app
+cd <REPO>/lpr-kirin8020-app
 powershell -NoProfile -ExecutionPolicy Bypass -File tools\run_camera_sweep.ps1 `
     -Tag sweep1 -Gears 0,1,3,4 -ObserveSec 90
 

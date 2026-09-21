@@ -3,7 +3,12 @@
 - **日期**：2026-09-21
 - **票**：#9
 - **对应 ADR**：ADR-0002（论文主张）
-- **数据**：`op_collide.csv` / `op_collide.json`
+- **数据**：`models_om_ops/op_collide.csv`（51 行，逐算子四关结果）+ `models_om_ops/op_collide_device.log`（设备端原始回传）
+  > ⚠️ **2026-09-21 路径更正**：本行原写「`op_collide.csv` / `op_collide.json`」。
+  > 实测 **`op_collide.json` 不存在**（该 CSV 由 `tools/parse_op_collide.py` 从
+  > `op_collide_device.log` 解析而来，没有 JSON 产物）；且这两个文件在
+  > **`models_om_ops/`** 而非 `evidence/`。守卫 `tools/verify_published_numbers.py`
+  > 已把该路径纳入存在性检查。
 
 ## 方法
 

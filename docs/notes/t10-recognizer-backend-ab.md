@@ -18,7 +18,10 @@
 - **日期**：2026-09-21
 - **设备**：HUAWEI nova 14 Pro（MIA-AL00）· 麒麟 8020 · HarmonyOS 6.1.0.135 · API 24
 - **构建**：release（`-O2`）
-- **证据**：`evidence/crop_ab_rec.log`、`evidence/crop_ab_det.log`（各 1002 行 = 2 LOAD + 1000 结果）
+- **证据**：`evidence/crop_ab.log`（rec 轮）、`evidence/crop_ab_det.log`（det 轮）（各 1002 行 = 2 LOAD + 1000 结果）
+  > ⚠️ **2026-09-21 路径更正**：本行原写 `evidence/crop_ab_rec.log`，**该文件不存在**。
+  > rec 轮的落盘文件名是 **`evidence/crop_ab.log`**（首行为 `CROPAB LOAD rec cpu …`，
+  > 可据此辨认）。守卫 `tools/verify_published_numbers.py` 已把该路径纳入存在性检查。
 
 ## 一句话结论
 
