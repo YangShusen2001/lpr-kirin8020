@@ -27,6 +27,17 @@ import os
 import re
 import sys
 
+# 允许出现的绝对路径：**厂商默认安装位置**，不是本机特有的东西。
+#
+# 判据：这条路径在厂商文档里是公开的默认值，且脚本只在环境变量缺失时用它兜底。
+# 它不泄露任何用户信息，也不妨碍别人复现（别人装了 DevEco 就是同一个路径）。
+# 与其为它留一条假警报，不如显式列出并说明理由 —— 白名单必须带依据。
+BENIGN_PATH_PREFIXES = [
+    "D:/IDE/DevEco_Studio", "D:\\IDE\\DevEco_Studio",
+    "D:/Tools/mindspore-lite", "D:\\Tools\\mindspore-lite",
+    "D:/Tools/NodeJS", "D:\\Tools\\NodeJS",
+]
+
 # (类别, 正则, 严重度, 说明)
 PATTERNS = [
     ("本机路径", re.compile(r"[A-Za-z]:[\\/](?:Users|IDE|Tools|Applications)[\\/][^\s`'\"）)]*"),
@@ -133,6 +144,8 @@ def scan_text(root: str) -> list[tuple[str, str, int, str, str]]:
                         for m in pat.finditer(line):
                             s = m.group(0)
                             if s.startswith("~/") or s.startswith("/tmp"):
+                                continue
+                            if any(s.startswith(p) for p in BENIGN_PATH_PREFIXES):
                                 continue
                             hits.append((sev, kind, i, rel, f"{s}  ← {note}"))
         except OSError:
