@@ -1,5 +1,6 @@
 # --- 临时/试验产物（不入库）---
 _scratch/
+.scratch/
 _hw_docs/
 _hw_nodes.csv
 _hw_tree.json
