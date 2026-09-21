@@ -2,6 +2,46 @@
 
 > 单一上下文（single-context）。词汇表见 `CONTEXT.md`，决策见 `docs/adr/`。
 
+## 开发流水线（每次开发都适用，不许跳步）
+
+本项目遵循 Matt Pocock 的技能链（来源 `mattpocock/skills`），
+**每一阶段都要有对应的出站工件**：
+
+```
+/grill-with-docs → /research → /to-spec → /to-tickets → /implement → /code-review → /handoff
+```
+
+| 阶段 | 命令 | 出站工件 | 落盘位置 |
+|---|---|---|---|
+| 访谈 | **`/grill-with-docs`** | 提问记录 | `docs/grilling-YYYY-MM-DD.md` |
+| 检索 | `/research` | 检索报告，**每条结论附来源 + 可信度标注** | `docs/notes/*.md` |
+| **规格** | **`/to-spec`** | **含 Problem / Solution / Scope 的 spec** | `docs/spec-<feature>.md` |
+| 拆票 | `/to-tickets` | 工单 + blocking edges | GitHub issues（见 `docs/agents/issue-tracker.md`） |
+| 实现 | `/implement` | 代码 / 文档，**一票一 commit** | 仓库 |
+| 评审 | `/code-review` | 评审意见 | PR / issue 评论 |
+| 收尾 | `/handoff` | `handoff.md` 或 release tag | 仓库 |
+
+> ⚠️ **安装状态（2026-09-22 核实）**：以上命令**目前一个都没装**。
+> 用户级只装了 `grill-me` + `grilling` 两个（`mattpocock/skills` 的 `productivity/` 下）。
+> 其余在 `engineering/` 下（`grill-with-docs`、`research`、`to-spec`、`to-tickets`、
+> `triage`、`wayfinder`、`implement`、`code-review`、`tdd`、`diagnosing-bugs`、
+> `domain-modeling`、`codebase-design`、`prototype` 等），
+> 以及 `productivity/handoff`。该仓库自带安装器 `setup-matt-pocock-skills`。
+>
+> **在装齐之前，按本表的工件约定执行，命令名当作阶段名使用。**
+
+**三条硬纪律：**
+
+1. **不跳步。** 尤其**不允许跳过 spec 直接写实现计划** —— 2026-09-22 发生过一次
+   （写了个 `roadmap.md`，被用户叫停并删除）。实现顺序属于 spec 的 Scope 或 tickets，
+   不属于独立的"路线图"文档。
+2. **spec 按 feature 命名，不覆盖历史。** 实验阶段的 spec 是 `docs/spec.md`，
+   交付阶段的是 `docs/spec-portfolio.md`；两者并存，互相 link。
+3. **research 阶段优先查一手资料，不埋头苦干。** 这条是用户明确要求的
+   （原话：「我们真正去搜资料很少，都是自己在埋头苦干，这是一个非常非常不好的做法」）。
+   一次针对性的官方检索把 GPU 的结论从「我们测出来慢」升级为「官方没提供这条路」——
+   两者都成立，但后者的说服力和可辩护性完全不同。
+
 ## 反退化约束（agent 行为，每次会话都适用）
 
 2026-09-21 实际发生过一次：思考块里连续复读数百行 `Let me write. / Writing. / Output.`，

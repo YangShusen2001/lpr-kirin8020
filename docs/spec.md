@@ -1,5 +1,9 @@
 # Spec · 麒麟 8020 车牌识别流水线：落点自证与算子覆盖边界
 
+> ⚠️ **这是「实验阶段」的 spec，其实验已全部完成（T1–T14）。**
+> **交付阶段**（论文收口 / NPU 指南 / 演示 / 作品集化）的 spec 见
+> [`docs/spec-portfolio.md`](spec-portfolio.md)。两份不互相覆盖。
+
 > 本 spec 由 `/to-spec` 从 `grill-with-docs` 会话综合而来，不重新访谈。
 > 词汇严格使用 `CONTEXT.md`；决策依据 `docs/adr/0001`–`0009`。
 
