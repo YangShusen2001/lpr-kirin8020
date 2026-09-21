@@ -24,6 +24,12 @@ node_modules/
 *.hap
 *.har
 
+# --- 论文编译产物 ---
+# main.pdf 是交付物，**入库**；日志、探针产物、预览图都可重生成，不入库。
+paper/en/*.log
+paper/en/_probe.pdf
+paper/en/preview/
+
 # --- 大体积模型（按需重新转换，见 docs/adr/0008）---
 *.ms
 *.om

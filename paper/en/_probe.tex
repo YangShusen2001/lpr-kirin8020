@@ -1,0 +1,21 @@
+% 工具链探针：只验证「tectonic + IEEEtran + 汉字」这条最短路径能通。
+% 不参与正式论文，编译命令：python tools/build_paper.py --probe
+\documentclass[conference]{IEEEtran}
+\usepackage{xeCJK}
+\setCJKmainfont{FandolSong-Regular.otf}[
+  BoldFont=FandolSong-Bold.otf,
+  ItalicFont=FandolKai-Regular.otf]
+\setCJKmonofont{FandolFang-Regular.otf}
+\setCJKsansfont{FandolHei-Regular.otf}
+\xeCJKsetup{CJKmath=true}
+
+\begin{document}
+\title{Toolchain probe}
+\maketitle
+\begin{abstract}
+Checks that tectonic resolves IEEEtran, xeCJK and Fandol without a TeX distribution.
+\end{abstract}
+\section{Probe}
+ASCII: \texttt{req=nnrt} \texttt{LANDED=CPU}. CJK in texttt: \texttt{苏ED5172 皖A00E66}.
+CJK in prose: 落点自证与算子覆盖边界。
+\end{document}

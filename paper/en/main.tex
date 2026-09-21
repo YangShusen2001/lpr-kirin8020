@@ -518,11 +518,23 @@ figures are not usable as results on this platform.
 \section{Discussion and Threats to Validity}
 \label{sec:discussion}
 
+\begin{figure}[t]
+\centering
+\includegraphics[width=\columnwidth]{fig6-c8-dose-response.pdf}
+\caption{Why an isolated benchmark is not the product-path cost. Left: raising
+the idle gap between calls from $0$ to $33$\,ms raises the median from
+$7.26$\,ms to $31.56$\,ms, and the upper end of that range coincides with the
+in-pipeline measurements. Right: a busy-wait of the same duration does not
+recover the loss at four threads ($+20.8$\,ms) but almost fully recovers it at
+one ($+0.29$\,ms), separating frequency scaling from thread-pool wake-up.}
+\label{fig:c8}
+\end{figure}
+
 \textbf{Isolated benchmarks are not product-path costs.} A discrepancy we did
 not expect, and which changed how we read every other latency number, is that
 the same model on the same backend with the same thread count costs roughly
 twice as much inside the application as in an isolated probe: $19.5$--$31.6$\,ms
-in the pipeline against $7.4$\,ms in a tight loop. A three-step experiment
+in the pipeline against $7.4$\,ms in a tight loop (Fig.~\ref{fig:c8}). A three-step experiment
 isolated two additive mechanisms. A dose--response sweep showed that increasing
 the idle gap between calls raises the median from $7.26$\,ms (no gap) to
 $16.14$\,ms ($8$\,ms) to $31.56$\,ms ($33$\,ms)---and the $33$\,ms point lands
