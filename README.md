@@ -82,6 +82,8 @@ which fails if a declared value no longer matches its source. See
 | CANN operator admission | **51/51** | incl. 9 rejected by NNRT | `op_collide.csv` |
 | Frame budget: detection vs recognition | **49 % / 10 %** | production config, detected frame | `camera_summary.md` |
 | Isolated probe vs in-pipeline cost | **7.4 ms vs 19.5–31.6 ms** | same model, backend, thread count | `camera_gap_sweep.log` |
+| Latency drift under sustained load | **+26.9 %** | 23.3 min / 80 rounds, thermal level **unchanged** | `rq4_thermal_80r.csv` |
+| Thermal 2→3 crossing | **never reached** | 80/80 rounds at level 2 — a negative result | `rq4_thermal_80r.csv` |
 
 ## What we deliberately do NOT claim
 

@@ -7,9 +7,16 @@ classifier, which is NOT the production path.
 import os, sys, glob, collections
 import numpy as np
 
-BASE = r"<PRIOR_WORK>/lpr-showcase"
+# 路径从环境解析（2026-09-21 改：原先硬编码本机路径，开源脱敏后被替换成占位符）。
+#   LPR_PRIOR_WORK  前期工程根（含 lpr-showcase）
+#   LPR_SCRATCH     本工程的临时数据目录
+_HOME = os.path.expanduser("~")
+PRIOR_WORK = os.environ.get("LPR_PRIOR_WORK", os.path.join(_HOME, "Desktop", "Test"))
+SCRATCH = os.environ.get("LPR_SCRATCH", os.path.join(_HOME, "lpr-data"))
+
+BASE = os.path.join(PRIOR_WORK, "lpr-showcase")
 sys.path.insert(0, os.path.join(BASE, "tools"))
-GREEN = r"<REPO>/lpr-kirin8020\_scratch\green"
+GREEN = os.environ.get("LPR_GREEN_DIR", os.path.join(SCRATCH, "green"))
 
 import hlpr_reference as H
 

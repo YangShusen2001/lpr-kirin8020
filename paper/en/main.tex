@@ -422,9 +422,97 @@ a property of the recogniser and the data, not of the accelerator.
 \section{Sustained-Load Behaviour}
 \label{sec:rq4}
 
-% ── PLACEHOLDER-RQ4 ── 20 分钟补跑完成后替换本节
-% 原 T7 数据只有 25 轮 / 6 分钟、thermal 恒 1，未跨过 thermal 2→3 台阶，
-% 核心问题（持续负载下 NPU 收益能否维持）未被测到。补跑进行中。
+\begin{figure}[t]
+\centering
+\includegraphics[width=\columnwidth]{fig5-rq4-sustained.pdf}
+\caption{Sustained load over 80 rounds (23.3 min). Thermal level never leaves
+level~2 and the tensor fingerprints are constant in every round, yet latency
+drifts upward. The shaded region is a 213\,s stall in which the operating system
+froze the application; it is marked rather than removed, because a reader who
+did not know about it would read it as a latency spike.}
+\label{fig:rq4}
+\end{figure}
+
+The fourth question is whether an accelerator's advantage survives sustained
+load. On this platform that question is usually framed thermally: the system
+exposes eight load levels, and the vendor requires that non-essential background
+work stop from level three upward. A previous characterisation of the same
+device family reported a $15$--$20\%$ NPU latency penalty when the thermal level
+moves from 2 to 3, which makes the crossing a natural quantity to measure.
+
+We ran the production pipeline for 80 rounds at 15\,s intervals, 23.3 minutes in
+total, recording thermal level, battery temperature, state of charge, charging
+state and the landing fingerprints on every round.
+
+\subsection{The thermal regime was not reached}
+
+The thermal level was \emph{constant at 2 for all 80 rounds}; battery
+temperature stayed within 1\,$^\circ$C. The 2$\to$3 crossing was never reached,
+so the $15$--$20\%$ penalty rule is neither confirmed nor refuted here. An
+earlier 25-round run of the same probe had the same outcome at thermal level~1
+over 6 minutes; extending the run by a factor of four did not change it. We
+report this as a negative result rather than extrapolating.
+
+\subsection{Latency degrades without a thermal crossing}
+
+The reason the negative result matters is that latency nevertheless drifted
+upward, monotonically, over the run:
+
+\begin{table}[t]
+\caption{Latency drift across the sustained run, excluding the frozen interval.
+Thermal level 2 and battery temperature 35\,$^\circ$C throughout.}
+\label{tab:drift}
+\centering
+\begin{tabular}{lccc}
+\toprule
+& rounds 0--17 & rounds 36--53 & change \\
+\midrule
+End to end (mean) & 64.44 ms & 81.76 ms & $+26.9\%$ \\
+CPU-resident stages & 49.47 ms & 63.94 ms & $+29.3\%$ \\
+NPU-resident stage & 14.92 ms & 17.78 ms & $+19.2\%$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Two things follow. First, \textbf{a stable thermal level does not imply stable
+performance}; a measurement protocol that records only thermal state and assumes
+the rest is stationary will be wrong by roughly a quarter over twenty minutes.
+Second, the degradation is \emph{not} uniform across the pipeline: the
+CPU-resident stages degrade by $29.3\%$ against $19.2\%$ for the NPU-resident
+stage. Since the production configuration places detection on the CPU, this is
+consistent with the frame-budget analysis in \S\ref{sec:pipeline} and reinforces
+the same conclusion from a different direction: on this pipeline, the
+accelerator is not where the variability lives.
+
+We do not attribute the drift to a mechanism. The device does not expose clock
+or thermal-zone readings to applications, so frequency scaling, scheduler
+behaviour and background interference cannot be separated here.
+
+\subsection{Two protocol defects found while running this}
+
+\textbf{The operating system freezes long-running foreground applications.}
+Between rounds 54 and 55 the interval was 213\,s rather than 15\,s. The device
+log shows the application being re-activated by the window manager at the end of
+that interval, implying it had been backgrounded and frozen. This is the same
+failure mode we had previously observed with screenshot capture. The remedy is
+to override the screen-off timeout before starting the run
+(\texttt{power-shell timeout -o}, restored afterwards); a rule of ``do not take
+screenshots'' is insufficient, because the trigger here was the screen turning
+off, not a screenshot. We mark the interval in Fig.~\ref{fig:rq4} rather than
+removing it, and we exclude it from Table~\ref{tab:drift}.
+
+\textbf{Inter-run variance is not a stable quantity at this sample size.} We
+initially intended to report whether the NPU-resident or CPU-resident stages
+exhibit more round-to-round variance, following the observation in prior work
+that CPU-side variance is the larger. Across three measurements of the same
+quantity we obtained three different answers: CPU-dominant, approximately equal,
+and NPU-dominant. Segment-wise, the NPU-side coefficient of variation ranges
+from $8.8\%$ to $48.2\%$ within a single run. We therefore report no comparison
+of this kind. Answering it requires repeated measurements \emph{within} a round
+rather than one measurement \emph{per} round, which the probe's design does not
+provide. What can be stated is simply that round-to-round variance is large
+(coefficient of variation around $27\%$), which is why single-point latency
+figures are not usable as results on this platform.
 
 % ============================================================================
 \section{Discussion and Threats to Validity}
