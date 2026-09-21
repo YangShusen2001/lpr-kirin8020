@@ -446,3 +446,48 @@ CANN LLM 简介 (`cannkit-llm-summary`) · NNRt Kit 简介 (`neural-network-runt
 NNRt 对接开发指导 (`neural-network-runtime-guidelines`)
 
 **Hardware:** [cpudb Exynos 1580 vs Kirin 8020](https://www.cpudb.cc/compare/samsung-exynos-1580-vs-hisilicon-kirin-8020)
+
+---
+
+## 附录（2026-09-21 更新）：Jev API 一手资料核实 + 「LPR + Jev 智慧城市」架构评估
+
+头部「Given, not re-verified」里对 Jev 的判断（API-only / 纯文本 / 无视觉 / 中国大陆不可用）
+本轮用一手来源**复核**，前半成立、最后一条**未能从官方文档证实**（官方页面无区域声明），
+其余关键事实如下（全部 `[V]` 本轮一手核实）：
+
+**来源**：[typesafe.ai 官方发布博客](https://typesafe.ai/blog/introducing-system-one-models-and-jev)（2026-09-15）、
+[API 使用文档](https://www.jevtypesafeai.com/how-to-use)（独立站点，内容与 Cloudflare 官方文档互证）、
+[Cloudflare AI docs `typesafe/jev`](https://developers.cloudflare.com/ai/models/typesafe/jev/)。
+
+**Jev 是什么**（System One 决策模型，不是 LLM）：
+- **单端点** `POST https://api.typesafe.ai/v1/systemone`（Bearer，`TYPESAFE_API_KEY`）；
+  也可走 **Cloudflare Workers AI**（`typesafe/jev`）与 **Vercel AI Gateway**。
+- 输入 `state`（字符串/JSON/文本数组，连同 questions 共 ≤64k tokens）+ `questions` 映射；
+  一次往返并行评估多个问题。
+- **三种题型**：`choice`（≤255 个带说明的候选项，返回选中项 + 各项概率 + 置信度）、
+  `score`（2–10 档刻度，返回可分数分数 + 全分布）、`noul`（校准 yes/no 概率）。
+  输出**类型化、不会 schema 错误、无幻觉字符串**；每题自带校准置信度。
+- **延迟 70–500 ms**（官方自报端到端）；**价格 $0.042/MTok 输入、输出免费**；
+  限流 250k tokens/s、1200 req/min。
+- **无视觉**：官方博客原文 *"The demo is on structured state as a data structure with text,
+  not on images (yet…)"* —— 图像输入尚在路线图，不是现在。
+- **正式 access 是 waitlist**（early access）；区域可用性官方未声明 ——
+  中国大陆可达性**需要实测**，不能信旧笔记的断言。
+
+**「手机 LPR（NPU + 60fps）+ Jev 代替多模态 Agent」评估**（给智慧城市交通模拟）：
+
+1. **方向是成立的，而且恰好是 Jev 的正确用法**。多模态 Agent 把「看图 + 决策」绑在一起，
+   端侧跑不动、云端 3–329 s 不可用；而本项目手机端已经把视觉问题解成结构化事件
+   （车牌串 / 牌色 / 置信度 / 时间戳）。Jev 要的输入恰好就是这种 state 对象 ——
+   **感知归感知（端侧专用流水线），决策归决策（Jev）**，分层是对的。
+2. **粒度必须按事件不按帧**。60fps 帧流直接喂 API 是 60 调用/秒的浪费（官方 Doom demo
+   10 qps ≈ $7/h）；正确做法：端侧 FSM 先做去抖/去重/轨迹聚合，**每辆车/每事件一次调用**
+   （Jev 支持单调用批量多问题）。典型 state ≈ 200–400 tokens，成本可忽略。
+3. **Jev 不是 Agent**：无工具调用、无记忆、无循环 —— 编排回路（事件队列、重试、
+   降级）要自己写，这正是它「function call」定位的含义。
+4. **置信度即路由**：`noul/score` 的置信度可做演示的阈值分流 —— 高置信自动决策，
+   低置信上送截图或人工（这正是官方建议用法）。
+5. **两条硬风险**：① 大陆网络对 `api.typesafe.ai` / Cloudflare AI 的可达性**未验证**，
+   演示前必须真机 ping 通 + 准备端侧规则引擎兜底；② waitlist 拿 key 有时延。
+6. **与论文关系**：Jev 在云，与本论文的端侧主张不冲突 —— 手机侧做**感知**，
+   恰好证明「感知下沉端侧 + 决策外置」的架构，反而可作为 RQ3 的应用叙事。
