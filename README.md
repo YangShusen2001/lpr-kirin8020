@@ -181,6 +181,7 @@ redistributed here:
 | Asset | Role | Upstream | Licence |
 |---|---|---|---|
 | `models/yolov5su_320_veh_fp32.ms` | Vehicle detection (ROI-path pre-stage) | ultralytics **YOLOv5u** COCO pre-trained weights (`yolov5su.pt`, ultralytics 8.4.117); DFL rewritten, then converted to MindSpore Lite | **AGPL-3.0** |
+| `models/yolov5s_v7_320_npu_{fp32,fp16}.ms` | Vehicle detection, **NPU-bound** candidate: bare head only (last rank-4 tensor), decode left to the host | **original anchor-based YOLOv5** v7.0 COCO weights (`yolov5s.pt`), exported from the v7.0 source tree (`git clone --branch v7.0`) — *not* the ultralytics `v5-u` weights | **GPL-3.0** |
 | `models/y5fu_320x_head*.ms` / `.ncnn.*` | Plate detection | project baseline, YOLOv5 architecture | per upstream |
 | `models/rpv3_mdict_160_r3.*` | Plate recognition | project baseline | per upstream |
 | `models/litemodel_cls_96x_r1.*` | Plate colour classification | project baseline | per upstream |
@@ -196,5 +197,14 @@ redistributed here:
 >
 > `libncnn.so` / `libomp.so` are redistributed as prebuilt binaries; their copyright
 > notices remain with their respective holders.
+
+> ⚠️ **Two different upstream projects, two different copyleft licences — do not conflate
+> them.** `yolov5su_320_veh_fp32.ms` comes from the **ultralytics** repository and is
+> **AGPL-3.0**. `yolov5s_v7_320_npu_*.ms` comes from the **original YOLOv5 v7.0** release
+> (`ultralytics/yolov5` tagged `v7.0`, anchor-based, no DFL) and that repository is
+> **GPL-3.0**. The two files are not interchangeable: the `v5-u` architecture's DFL head does
+> not pass the target NPU's transpose gate, which is precisely why the original anchor-based
+> architecture was ported. Neither weight is redistributed here — obtain it upstream and
+> convert it yourself, and assess the copyleft obligations against your own use.
 
 No NPU utilisation figure appears anywhere in this repository, by design.

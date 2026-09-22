@@ -152,7 +152,15 @@ bash build.sh assembleHap
 本仓库代码供研究与参考。第三方组件保留各自许可，模型与数据集**不在本仓库再分发**：
 
 - **推理栈** —— MindSpore Lite Kit 2.6.0 NDK、NNRT delegate（华为）。
-- **模型** —— 公开预训练权重（Apache-2.0 系）。**我们不训练任何模型**，全部按原样使用。
+- **模型** —— 公开预训练权重。**我们不训练任何模型**，全部按原样使用。但上游许可**并不统一**，别当成一类：
+  - `yolov5s_v7_320_npu_*.ms` ← **原版 anchor-based YOLOv5 v7.0**
+    （`ultralytics/yolov5` 的 `v7.0` tag，anchor-based、无 DFL），该仓库是 **GPL-3.0**；
+  - `yolov5su_320_veh_fp32.ms` ← **ultralytics** 仓库（YOLOv5u），是 **AGPL-3.0**；
+  - `libncnn.so` = **BSD-3-Clause**；`libomp.so` = **Apache-2.0 with LLVM Exceptions**。
+  - 这两份车辆检测权重**互不替代**：`v5-u` 的 DFL 头过不了目标 NPU 的 transpose 门，
+    这正是要移植原版 anchor-based 架构的原因。**两者都不在本仓库再分发**，
+    请自行获取上游权重再转换，并按自己的用途评估 copyleft 义务。
+  - 逐项清单见 `README.md` 的 *Per-asset licences* 表。
 - **数据集** —— CCPD / CCPD2020-Green（ECCV 2018）按其自身条款使用，**不再分发**。
   仓库内只有抽样脚本，没有图片。
 - **CANN DDK / OMG** —— 厂商匿名可下，本仓库不再分发。

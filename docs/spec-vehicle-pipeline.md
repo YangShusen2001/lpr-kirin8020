@@ -706,8 +706,11 @@ NMS，`vehDedupeIou = 0.6`。放在**逐框遍历之前**：省的是整次「�
 
 ## 九·补六、T6 真机性能实测（2026-09-22）
 
-设备：**`nova 14 Pro`**（hdc connect-key `4CY9K25614046328`）。票面写的是 `MIA-AL00`，
-**实际采集用的是 nova 14 Pro** —— 耗时与机型绑定，如实标注以免混用。
+设备：**`MIA-AL00`（商品名 `nova 14 Pro`）**。票面写的是 `MIA-AL00`，早期笔记写的是
+`nova 14 Pro` —— **这两个是同一台机**：`const.product.model = MIA-AL00`、
+`const.product.name = nova 14 Pro`。此前以为「票面机型与实际机型不符」，是误判，
+不存在需要选设备的问题。（hdc 连接标识已脱敏，不入文档。）
+耗时与机型绑定，如实标注以免混用。
 
 ### 结论：直检在预算内，ROI 必然超预算
 
@@ -750,6 +753,130 @@ NMS，`vehDedupeIou = 0.6`。放在**逐框遍历之前**：省的是整次「�
 抓布局树时 `roiSegText` 偶发为空（`实际：ROI` 在、`车框 …` 那行不在）。界面写的是
 `Text(roiSegText.length > 0 ? roiSegText : ' ')` —— 纯空白 Text 在 dump 里可能被跳过；
 也可能确有一帧未写。待查。
+
+## 九·补七、T8 换原版 YOLOv5 与 NPU 转换（2026-09-22）
+
+动机接「九·补六」：ROI 路径的**下限是车辆检测 73 ms**，占满 33.3 ms 预算的两倍多。
+要压下去只有一条路 —— 把车辆检测从 CPU/ncnn 挪到 NPU。而当前车辆模型
+`yolov5su_320_veh_fp32.ms` 是 ultralytics 的 **v5-u（含 DFL）**，**DFL 那个 rank-4 permute
+过不了麒麟 NPU 的 Transpose 硬门**。所以必须换回**原版 anchor-based YOLOv5**。
+
+### 三条硬门结论（均为扫描器原话，不是推测）
+
+| 模型 | 判词 | 结论 |
+|---|---|---|
+| v5-u 裸导出 | `/model.24/dfl/Transpose perm=[0,3,1,2]` | 不过 |
+| 原版 v7 裸导出 | `/model.24/Transpose perm=[0,1,3,4,2]`（**rank-5**） | 不过 |
+| 原版 v7 **裁掉解码段** | `✓ 硬门1 过：所有张量 rank ≤ 4` + `Transpose 共 0 个` | **两条全过** |
+
+**关键认识**：原版 v7 的失败点不在 DFL，而在 Detect 头把
+`view(bs,na,no,ny,nx) → permute(0,1,3,4,2)` **连同 sigmoid 与 anchor-grid 解码一起放在
+rank-5 上跑**。所以**不能只删 Transpose** —— 要按 `kirin-npu-model-porting` 第二节
+「切在最后一个 rank-4 张量」，把整段解码搬出计算图。
+
+### 切点定位与数值自证
+
+沿 `/model.24/Transpose*` 反查 producer，得 `Transpose ← Reshape ← Conv`，
+故 rank-4 边界即 `/model.24/m.{0,1,2}/Conv_output_0`。反向可达裁切后：
+节点 292 → 231（删 61 个解码节点），常量 120 → 120（**丢 0** —— rank-5 常量随之消失），
+输出 `(1,255,40,40) / (1,255,20,20) / (1,255,10,10)`。
+
+**裁切是否改变语义**，用「原图跑 ORT 取 output0 ↔ 裁切图跑 ORT + numpy 复现解码」逐元素比：
+
+    maxAbsDiff = 9.155273e-05    meanAbsDiff = 9.736768e-08
+    maxAbsDiff / mean|ref| = 1.922e-05
+
+属 float32 累积噪声量级。**解码常量从原图里抽出来**（不手抄），抽出的值与 YOLOv5 官方规格
+逐字一致：anchors `[[10,13],[16,30],[33,23]] / [[30,61],[62,45],[59,119]] / [[116,90],[156,198],[373,326]]`，
+strides `[8,16,32]` —— 这也是「权重确为原版」的旁证。
+
+### converter 结果对比（同一台机器，MindSpore Lite 2.6.0）
+
+| ONNX | converter 结果 |
+|---|---|
+| v5-u（含 DFL） | **失败**：`InferShapeByNNACL for op: /model.22/dfl/conv/Conv failed` → `Convert failed` |
+| 原版 v7 裁切后 fp32 | `CONVERT RESULT SUCCESS:0`，日志**零告警**（28.95 MB） |
+| 原版 v7 裁切后 fp16 | `CONVERT RESULT SUCCESS:0`，日志**零告警**（14.50 MB） |
+
+### 权重来源与可复核凭据
+
+- sha256 `8b3b748c1e592ddd8868022e8732fde20025197328490623cc16c6f24d0782ee`，14,808,437 B
+- 加载后自证：`213 layers, 7225885 parameters, 16.4 GFLOPs`；anchor 3 层、**无 DFL**；前向 `(1,6300,85)`
+- 导出用 **yolov5 v7.0 源码**（`git clone --depth 1 --branch v7.0`），不用 PyPI 轮子
+- 许可：yolov5 仓库是 **GPL-3.0**（与 ultralytics 8.x 的 **AGPL-3.0** 不同，README 已分开列）
+
+### 踩到的 5 个坑（已写进脚本注释，避免重踩）
+
+1. **ultralytics 8.4 静默换权重**：传 `yolov5s.pt` 实际加载 `yolov5su.pt`，产物仍命名
+   `yolov5s_320.onnx` —— 名字对、内容错。→ **一律以 `scan_onnx.py` 结果为准，不看文件名**。
+2. **PyPI `yolov5==7.0.14` 不可用（两处）**：`from huggingface_hub.utils._errors import …`
+   （本机 hf_hub 1.24 已删该模块）；且 `attempt_load` 内是裸 `from models.yolo import …`
+   （轮子把 `models/` 放在包**内**）。→ 必须用 v7.0 **源码仓库**，仓库根进 `sys.path[0]`。
+3. **setuptools ≥ 81 不再发布 `pkg_resources`**，而 yolov5 仍 `import pkg_resources as pkg`。
+   → 不降级全局 setuptools（83.0.0 已被其他工具链占用），改 `--target _veh/pylibs --no-deps`
+   装旧版并在脚本内临时追加 `sys.path`。
+4. **torch ≥ 2.6 把 `torch.load` 的 `weights_only` 默认改成 True** → 权重里的
+   `models.yolo.Model` 不在白名单。→ 仅在导出进程内改回 `False`，并打印 sha256 作为可信凭据。
+5. **torch 2.13 的 `torch.onnx.export` 默认 `dynamo=True`**（依赖 `onnxscript`）。
+   → 显式 `dynamo=False` 走 yolov5 原本的旧版 TorchScript exporter，不引入未经验证的新导出器。
+
+### 真机验证（T8 第 3、4 项）
+
+设备 **`MIA-AL00`（商品名 `nova 14 Pro`）**，API 24。模型进 rawfile 后走
+`probeAll` / `detDriftProbe`（后者每行带 `mk=<模型>` 以区分多模型）。
+判据只认 `landed=` 这个**实际落点**字段 —— 请求后端与落点是两件事。
+
+| 模型 | 后端 | `landed`（实际落点） | p50 (ms) | mean (ms) |
+|---|---|---|---|---|
+| `y5fu_320x_head_fp32.ms`（对照：车牌侧现存裸头） | nnrt | `NNRT:NPU_ohos.boot.hardware.kirin8020_v2_0` | 5.054 | 4.743 |
+| 同上 | cpu | `CPU` | 8.178 | 8.290 |
+| **`yolov5s_v7_320_npu_fp32.ms`** | nnrt | `NNRT:NPU_ohos.boot.hardware.kirin8020_v2_0` | **5.392** | 5.395 |
+| 同上 | cpu | `CPU` | **42.016** | 41.109 |
+| **`yolov5s_v7_320_npu_fp16.ms`** | nnrt | `NNRT:NPU_ohos.boot.hardware.kirin8020_v2_0` | **5.537** | 5.514 |
+| 同上 | cpu | `CPU` | 41.646 | 40.559 |
+
+**落点是真的 NPU，不是静默回落** —— 两条自证：
+
+1. `landed` 逐字回 `NNRT:NPU_ohos.boot.hardware.kirin8020_v2_0`（含设备名）。
+2. 同一模型 nnrt 与 cpu 的 checksum **不同**（fp32：`L2=3491.7710` vs `3492.3102`，
+   `maxAbs=17.4844` vs `17.5216`）。若 nnrt 静默回落 CPU，两者必须**逐位相同**。
+
+**同引擎同模型的后端比**（MS Lite 内部 —— 这是唯一能隔离出 NPU 收益的口径）：
+
+| 模型 | NPU p50 | CPU p50 | 加速比 |
+|---|---|---|---|
+| `yolov5s_v7_320_npu_fp32.ms` | 5.392 | 42.016 | **7.79×** |
+| `yolov5s_v7_320_npu_fp16.ms` | 5.537 | 41.646 | **7.52×** |
+| `y5fu_320x_head_fp32.ms`（对照） | 5.054 | 8.178 | 1.62× |
+
+另有**跨框架对照**（T8 组里 ncnn 自证探针同轮产出）：同一份 `y5fu_320x_head` 裸头，
+ncnn（Vulkan 生效，`vulkan=1 gpu=ok=1`）p50 = **34.54 ms**，MS Lite NPU = **5.05 ms**，
+差 **6.83×**。即「上 NPU」的收益不只来自 CPU→NPU，也来自 ncnn→MS Lite。
+同轮 `gpuProbe` 也再次确认 GPU 档不可用：`req=gpu` → `LANDED=CPU fallback=GPU:fp16`。
+
+### 与 T6 的下限对照 —— 口径必须写清楚
+
+T6 测到的车辆检测下限是 **73 ms**（in-pipeline，含 letterbox 预处理 + 解码 + NMS，
+CPU/ncnn）；本轮 NPU 裸头是 **5.39 ms**（纯推理，不含预处理与解码）。
+**两者不是同一口径，不能相除当加速比。** 可以说的是：
+
+- 裸头同口径下，NPU 比同引擎 CPU 快 **7.79×**；
+- 73 ms 里预处理 + 解码 + NMS 占了不少（同轮 CPU 裸头 42.02 ms），
+  这部分**不会被 NPU 加速** —— 接入后要看的是端到端 frameMs，不是裸头。
+
+结论：**NPU 是 ROI 路径唯一有量级收益的方向**（T6 已排除去重/top-N 能解决）。
+接入属后续 ticket，且须先有 spec —— 裸头只吐 `(1,255,H,W)`，sigmoid 与 anchor 解码
+搬到 Host 侧实现是本 ticket 之外的活。
+
+### 一个未解释的观察（不写成结论）
+
+fp16 与 fp32 两份模型在 **nnrt 档**的 checksum **完全相同**（`L2=3491.7710`、
+`maxAbs=17.4844`），但在 **cpu 档**不同（`3491.8379` vs `3492.3102`）。
+一个可能解释是 NPU 内部按 fp16 执行、两份模型落到同一套 fp16 kernel，
+但这只是猜测，**没有证据**，留作观察项。
+
+证据文件：`_veh/devlog_T8V7.txt`（27 行，含 6 条 `DET DRIFT`、3 条 `MATRIX … gpu`、
+1 条 `NCNN RUN` 与 Vulkan verdict）。全量原始日志 `_veh/devlog_T8V7_raw.txt`。
 
 ## 十、下一步
 
