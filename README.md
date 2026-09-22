@@ -170,11 +170,31 @@ components retain their own licences, and the models and datasets are **not**
 redistributed here:
 
 - **Inference stack** — MindSpore Lite Kit 2.6.0 NDK, NNRT delegate (Huawei).
-- **Models** — public pre-trained weights (Apache-2.0 family). We train nothing; every
-  model is used as published.
+- **Models** — public pre-trained weights; per-asset terms in the table below. We train
+  nothing; every model is used as published.
 - **Datasets** — CCPD / CCPD2020-Green (ECCV 2018) are used under their own terms and are
   **not** redistributed. Sampling scripts are included; the images are not.
 - **CANN DDK / OMG** — anonymously downloadable from the vendor, not redistributed here.
-- **ncnn / OpenMP runtime** — see the respective upstream licences.
+
+### Per-asset licences
+
+| Asset | Role | Upstream | Licence |
+|---|---|---|---|
+| `models/yolov5su_320_veh_fp32.ms` | Vehicle detection (ROI-path pre-stage) | ultralytics **YOLOv5u** COCO pre-trained weights (`yolov5su.pt`, ultralytics 8.4.117); DFL rewritten, then converted to MindSpore Lite | **AGPL-3.0** |
+| `models/y5fu_320x_head*.ms` / `.ncnn.*` | Plate detection | project baseline, YOLOv5 architecture | per upstream |
+| `models/rpv3_mdict_160_r3.*` | Plate recognition | project baseline | per upstream |
+| `models/litemodel_cls_96x_r1.*` | Plate colour classification | project baseline | per upstream |
+| `libs/arm64-v8a/libncnn.so` | GPU (Vulkan) inference runtime | [Tencent ncnn](https://github.com/Tencent/ncnn) | **BSD-3-Clause** |
+| `libs/arm64-v8a/libomp.so` | OpenMP runtime (ncnn dependency) | [LLVM OpenMP](https://github.com/llvm/llvm-project) | **Apache-2.0 with LLVM Exceptions** |
+
+> ⚠️ **AGPL-3.0 note.** `yolov5su_320_veh_fp32.ms` derives from ultralytics YOLOv5, which is
+> AGPL-3.0. This repository does **not** redistribute that weight — obtain it upstream and
+> convert it yourself. If you build a work containing an AGPL-3.0 component and distribute
+> it or expose it over a network, the AGPL's obligations apply to **you**; assess them
+> yourself. Vehicle detection is an **optional** pre-stage — the direct-detection path does
+> not use it.
+>
+> `libncnn.so` / `libomp.so` are redistributed as prebuilt binaries; their copyright
+> notices remain with their respective holders.
 
 No NPU utilisation figure appears anywhere in this repository, by design.
