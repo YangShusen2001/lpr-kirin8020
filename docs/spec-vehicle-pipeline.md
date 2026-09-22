@@ -428,10 +428,13 @@ python _veh/veh_ref.py --compare --ref-json _veh/veh_ref.json --device-log _veh/
 3. **日志与返回串的字段名是两套**。hilog 里是紧凑写法（`roi=x,y,w,h`、`direct=`、`roiPlates=`），
    NAPI 返回串里是 `roiX0`/`directCount`/`roiCount`。PC 判据脚本只认一种就会把字段读成 `None`，
    然后对着一堆 `None` 报"未覆盖"—— 看着像实现有问题，其实是解析问题。
-4. **`SP8C00E120R7P5` 触发发布门禁**。它是 HarmonyOS 的 SP 版本串（不是序列号），
-   但 `scan_for_publication.py` 按"字母数字混合的设备标识"判阻断。
-   已从 spec 与 GitHub 评论里清掉 —— 去掉它不影响可复现性（`MIA-AL00` + `6.1.0.135` + API 24 已足够）。
-   **教训：往文档里贴设备版本串之前先想一下门禁。**
+4. **设备 SP 版本串触发发布门禁**。HarmonyOS 版本号后面括号里那段 SP 串（形如
+   `6.1.0.135` 之后的服务包标识）并不是序列号，但 `scan_for_publication.py` 按
+   "字母数字混合的设备标识"判**阻断**。
+   已从 spec 与 GitHub 评论里清掉 —— 去掉不影响可复现性（`MIA-AL00` + `6.1.0.135` + API 24 已足够）。
+   **教训两条**：① 往文档里贴设备版本串之前先想一下门禁；
+   ② **解释"这个串会触发门禁"时也别把串本身写进去** —— 第一版就是这么写的，
+   结果文档自己把门禁又踩了一次。
 
 ### 门禁
 
@@ -440,6 +443,101 @@ python _veh/veh_ref.py --compare --ref-json _veh/veh_ref.json --device-log _veh/
 | `_veh/roi_selftest_check.py` | ✓ 设备 25/25 + PC 侧几何/像素独立复核一致 |
 | `_veh/roi_probe_check.py` | ✓ IoU 0.875、车牌串逐字符一致 |
 | App 构建 / 华为签名 / 装机 | ✓（`SignHap` 仍是已知 CLI 限制） |
+| `tools/verify_published_numbers.py` | ✓ 67/67 |
+| `tools/scan_for_publication.py` | ✓ 0 阻断（1 项文本待确认：论文联系邮箱） |
+
+## 九·补三、T4 实施记录（2026-09-22）
+
+### 做了什么
+
+| 接口（`lpr_pipeline.{h,cpp}`） | 作用 |
+|---|---|
+| `PlateResult::ownerVeh` | 车牌归属的车辆框下标（-1 = 无归属）。**界面画「车牌→哪辆车」连线的唯一依据** |
+| `RoiPipelineOptions` | `vehConf=0.05`(D1) / `roiExpand=0.15` / `dedupeIou=0.5`(D3)，全部可调 |
+| `RoiPipelineStats` | 分段统计（**不补零**：没发生的阶段保持 0） |
+| `LprDedupePlates(plates, iouThresh)` | 按 `detScore` 降序贪心去重；保留高分、与输入顺序无关 |
+| `LprDedupeSelfTest()` | 10 条纯数据单元断言 |
+| `LprRunRoiPipeline(...)` | 端到端：车辆检测 → **逐框** ROI → 逐框车牌检测 → 映射回原图 → 合并去重 |
+| `LprOverlapDedupeProbe(...)` | **构造重叠车框**的集成验证 |
+
+NAPI：`roiPipelineAsync(vehId,detId,recId,clsId,rgba,w,h,vehConf?,roiExpand?,dedupeIou?)`、
+`roiDedupeSelfTestAsync()`、`roiOverlapSelfTestAsync(vehId,detId,recId,clsId,rgba,w,h)`。
+
+一个实现细节值得记：**单个 ROI 失败不让整帧失败**（计入 `roiSkipped` 继续下一个）。
+一帧多车时，一个框裁坏不该把其它车的结果一起丢掉。
+
+### 验收证据
+
+**一、合并去重生效（票面明确要求「构造重叠车框验证」）**
+
+单元用例 10/10（`_veh/devlog_T4DEDUPE.txt`）：完全重合 / IoU 0.667 / IoU 0.333 / 链式重叠 /
+顺序无关 / 边界相接 / 空输入 / 单条 / 归属保留 / 输出降序。
+
+但**单元用例喂的是重叠的「车牌框」，不是票面说的「车框」**。所以补了整条因果链的集成验证：
+
+```
+T4OVERLAP case=overlap-dedupe;ok=1;growPx=6;boxA=19,65,245,184;boxB=13,59,251,190;
+          roi0=0,47,279,156;roi1=0,39,287,171;raw=2;kept=1;iouBefore=0.888889;
+          codeBefore=浙AG557A;keptCode=浙AG557A;keptScore=0.855748
+```
+
+车框 B 是**人为构造**的（A 向四周各外扩 6 px），与 A 必然重叠；两个重叠 ROI 各自跑车牌检测
+⇒ **raw=2**（同一块牌被检出两次，两次的框 IoU 0.889）⇒ **kept=1**（去重收敛），且保留的是
+同一块牌 `浙AG557A`。这条是 T4 去重生效的**直接证据**。
+
+**二、ROI 路径端到端可跑（`_veh/t4_check.txt`）**
+
+```
+T4PIPE veh=5 truncated=0 roiTried=5 roiSkipped=0 rawHits=1 dropped=0 count=1
+        vehInferMs=87.13 roiDetectMs=66.82 totalMs=158.47
+T4PLATE idx=0 rect=107,114,170,130 score=0.8557 owner=0 colour=green code=浙AG557A recConf=0.990
+```
+
+判据（`_veh/roi_pipeline_check.py`）全过：去重账平（`rawHits - count == dedupeDropped`）、
+车框账平（`roiTried + roiSkipped == vehCount`）、每条车牌 `owner ∈ [0,vehCount)`、
+颜色只取 blue/green/yellow/unknown（ADR-0005 像素测量口径，**未引入分类器**）、检出即非空串。
+
+⚠️ **如实说明**：这张测试图只有一块车牌，`dropped=0` —— 即**去重在这张图上根本没被触发**。
+"去重生效"的证据来自上面的构造用例，不是来自这一行。把 `dropped=0` 说成"去重验证通过"是错的。
+
+**三、CCPD 召回（票面：91.0% ± 1pp，不得低于 90%）**
+
+```
+配置 320|0.15：ROI top1=0.905 any=0.907（直检 top1=1.0）；无车辆率=0.085
+```
+
+**落在带内**（0.905 / 0.907 均在 0.90–0.92）。与研究笔记 §5.8 的 0.9100 差 0.3pp，
+原因是原测量用的车辆权重文件 `_veh/yolov5su.onnx` 已不在工作区，本次用的是
+`_veh/yolov5su_320.onnx` —— **这 0.3pp 的差异来源是权重文件版本，不是实现差异**，如实记录。
+
+**口径说明**：这个召回是**主机侧**测量（`_veh/roi_vs_direct.py`），它复用
+`hlpr_reference.py` —— 与 native 代码同源的权威后处理实现。设备侧不可能读 CCPD 真值框，
+1000 张过设备也不现实。所以：**召回由主机侧测，设备侧负责证明实现与主机一致**
+（T2 的逐元素对照 + T3 的几何/像素双重复核）。
+
+### 踩到的坑
+
+1. **日志与返回串字段名两套 —— 第二次踩。** T3 的判据脚本已经因为这个把字段读成 `None`，
+   当时也在 spec 里记过；T4 的脚本又踩了一遍（`veh=` vs `vehCount`、`dropped=` vs `dedupeDropped`），
+   这次直接 `KeyError` 崩了。**规律：hilog 走紧凑名（省日志长度），返回串走语义名。**
+   两个脚本现在都做了归一化 —— 但更该做的是让 native 侧两处用同一套名字。
+2. **`rect` 的分隔符也不一致**：hilog 用逗号，返回串用竖线。判据脚本统一成竖线再解析。
+3. **解释"某个串会触发门禁"时，别把那个串写进文档。** 第一版在 spec 里引用了设备 SP 版本串
+   来说明它会被拦，结果文档自己把门禁又踩了一次。
+
+### 留给 T5 的小问题（已发现，不藏）
+
+- 探针台底部按钮从 4 个涨到 6 个后，最右的「清空」右边缘贴到屏幕边（`x2 = 1224`），
+  右侧 12 px 内边距被吃掉。功能无影响，但视觉上是缺陷；T5 重做界面时一并处理。
+- 研究笔记 §6 提的「并行双路 + ROI 降级为自动兜底（不做手动开关）」**没有被本 spec 采纳** ——
+  spec D2 与 T5 票面选的是「两条路径可切」。两处文档口径不一致，**需要用户拍板**后统一。
+
+### 门禁
+
+| 项 | 结果 |
+|---|---|
+| `_veh/roi_pipeline_check.py` | ✓ 去重自证 10/10 + 构造重叠车框 raw=2→kept=1 + 账目/归属 + 召回在带内 |
+| App 构建 / 华为签名 / 装机 | ✓ |
 | `tools/verify_published_numbers.py` | ✓ 67/67 |
 | `tools/scan_for_publication.py` | ✓ 0 阻断（1 项文本待确认：论文联系邮箱） |
 
