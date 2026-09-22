@@ -2,7 +2,7 @@
 
 > 本 spec 由 `/to-spec` 从 `/grill-with-docs` 会话综合而来，**不重新访谈**。
 > 输入工件：`docs/grilling-2026-09-22.md`（grill）+ 两份检索报告（research，
-> 见 `docs/notes/gpu-official-verdict.md` 与 `on-device-decision-model-survey.md` 附录二）。
+> 见 `docs/notes/gpu-official-verdict.md` 与 [`notes/on-device-decision-model-survey.md`](notes/on-device-decision-model-survey.md) 附录二）。
 > 词汇严格使用 `CONTEXT.md`；决策依据 `docs/adr/0001`–`0007`。
 >
 > **与 `docs/spec.md` 的关系**：那一份是**实验阶段**的 spec（落点自证 + 算子覆盖边界），
@@ -91,7 +91,7 @@
 | 阶段 | 命令 | 出站工件 | 本轮的对应物 |
 |---|---|---|---|
 | 访谈 | `/grill-with-docs` | 提问记录 | `docs/grilling-2026-09-22.md` |
-| 检索 | `/research` | 检索报告（附来源与可信度标注） | `docs/notes/gpu-official-verdict.md`、`on-device-decision-model-survey.md` 附录二 |
+| 检索 | `/research` | 检索报告（附来源与可信度标注） | `docs/notes/gpu-official-verdict.md`、`notes/on-device-decision-model-survey.md` 附录二 |
 | **规格** | **`/to-spec`** | **含 Problem / Solution / Scope 的 spec** | **本文** |
 | 拆票 | `/to-tickets` | 工单 + blocking edges | ✅ 已发布：GitHub issues **#13–#28**，索引见 [`docs/tickets-2026-09-22.md`](tickets-2026-09-22.md) |
 | 实现 | `/implement` | 每票一 commit，message 引用票号 | — |
@@ -194,7 +194,7 @@
 - **中文论文** —— 论文只出英文版
 - **产品级 UI** —— 用户原话：「不需要设计成产品的这么高规格，只需要简单清晰、实看」
 - **红果短剧 / 抖音 / 快手自动化** —— **下一个项目**，本轮只在展示页登记为"进行中"
-- **Browser Use + Jev** —— 同上方向。最小原型已设计（`on-device-decision-model-survey.md` 附录二）
+- **Browser Use + Jev** —— 同上方向。最小原型已设计（[`notes/on-device-decision-model-survey.md`](notes/on-device-decision-model-survey.md) 附录二）
 - **麒麟 9050 / 云手机全系列测试** —— 待云手机验证后再规划
 - **融合携带「相关 → 因果」** —— P3，等审稿意见或作为未来工作
 - **双层黄牌 / 港澳两地牌** —— 如实写"未测"即可

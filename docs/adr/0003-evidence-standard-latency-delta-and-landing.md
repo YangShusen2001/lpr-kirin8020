@@ -3,7 +3,7 @@
 - **状态**：已接受
 - **日期**：2026-09-20
 - **前置**：ADR-0002（论文主张）
-- **证据**：`harmonyos-npu-gpu-squeeze-research.md` §D；`lpr-showcase/_evidence/A17`（`L2asFp16` 列）
+- **证据**：`../notes/harmonyos-npu-gpu-squeeze-research.md` §D；`lpr-showcase/_evidence/A17`（`L2asFp16` 列）
 
 ## 问题
 
