@@ -5,6 +5,26 @@ instrument, not just an app.**
 
 [English](README.md) | [中文](README.zh-CN.md)
 
+[![Number guards](https://img.shields.io/badge/number%20guards-91%2F91%20passing-brightgreen)](https://github.com/YangShusen2001/lpr-kirin8020-app/blob/main/tools/verify_published_numbers.py)
+[![Device](https://img.shields.io/badge/device-Kirin%208020%20%C2%B7%20HarmonyOS%206%20%2F%20API%2024-orange)](#)
+[![Manuscript](https://img.shields.io/badge/manuscript-IEEEtran%20%C2%B7%208%20pp-blue)](paper/en/main.tex)
+
+---
+
+### TL;DR
+
+1. **The question.** HarmonyOS exposes **no NPU-utilisation counter** — so placement is
+   proven by a `req=` / `LANDED=` / `fallback=` log protocol plus tensor fingerprints,
+   never asserted from a configuration file.
+2. **What it found.** Operator support is a **model × toolchain** property, not a hardware
+   one: NNRT rejects 16 of 36 standalone probes while CANN passes **51/51**. A backend
+   swap changes **0 %** of outputs yet is still statistically significant (**+3.2 pp**,
+   p < 0.0001).
+3. **Where it landed.** The same detection task re-architected from a DFL head (**fails
+   conversion**) to anchor-based YOLOv5 (**lands on the NPU, 7.79×** same-stack CPU).
+
+![Pipeline and the landing self-evidencing protocol](paper/figures/fig1-pipeline-and-landing.png)
+
 ---
 
 ## The problem this repository exists to answer

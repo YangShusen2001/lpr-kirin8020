@@ -4,6 +4,24 @@
 
 [English](README.md) | [中文](README.zh-CN.md)
 
+[![数字守卫](https://img.shields.io/badge/%E6%95%B0%E5%AD%97%E5%AE%88%E5%8D%AB-91%2F91%20%E9%80%9A%E8%BF%87-brightgreen)](https://github.com/YangShusen2001/lpr-kirin8020-app/blob/main/tools/verify_published_numbers.py)
+[![设备](https://img.shields.io/badge/%E8%AE%BE%E5%A4%87-%E9%BA%92%E9%BA%9F%208020%20%C2%B7%20HarmonyOS%206%20%2F%20API%2024-orange)](#)
+[![论文](https://img.shields.io/badge/%E8%AE%BA%E6%96%87-IEEEtran%20%C2%B7%208%20%E9%A1%B5-blue)](paper/en/main.tex)
+
+---
+
+### 一句话
+
+1. **要回答什么。** HarmonyOS **不暴露 NPU 利用率计数器** —— 所以落点靠
+   `req=` / `LANDED=` / `fallback=` 日志协议 + 张量指纹来证明，**不由配置文件推定**。
+2. **测出了什么。** 算子支持性是「**模型 × 工具链**」的属性而非硬件属性：
+   NNRT 侧 36 个单独构图探针里 16 个被拒，CANN 侧 **51/51 全过**。换后端改变
+   **0%** 输出，但配对检验显示它仍是显著变量（**+3.2 pp**，p < 0.0001）。
+3. **落到了哪里。** 同一检测任务换架构：DFL 头**转换即失败**，原版 anchor-based
+   YOLOv5 裁掉解码头后**真机落 NPU，7.79×**（同栈 CPU）。
+
+![流水线与落点自证协议](paper/figures/fig1-pipeline-and-landing.png)
+
 ---
 
 ## 这个仓库要回答的问题
