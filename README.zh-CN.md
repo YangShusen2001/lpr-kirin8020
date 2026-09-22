@@ -44,6 +44,12 @@ NNRT 通路上，36 个单算子探针有 16 个**单独构图时被拒**——�
 **包含 NNRT 侧被拒的那九个**。`ConvTranspose` 在 NNRT 侧**连模型都转换不出来**，
 在 CANN 侧转换成功并跑通。同一份 ONNX，一侧产不出模型，另一侧能跑。
 
+T8 把这条从**探针**推到了**生产阶段**：为了把车辆检测从 CPU 挪走，同一个任务换了架构
+（ultralytics `v5-u` → 原版 anchor-based YOLOv5）。`v5-u` 的头**连转换都过不去**
+（`InferShapeByNNACL for op: /model.24/dfl/conv/Conv failed`）；原版架构在裁掉解码头之后
+静态门全过，真机落在 NPU 上、耗时是自己同栈 CPU 的 **7.79×**。
+**同一个任务、同一条工具链、两种架构 —— 一种被拒、一种准入。**
+
 **三、真正该盯的不是落点。**
 在 1000 张真实整车图上，换识别器的后端改变**零**个输出，换检测器改变**一个**。
 这是想要的结果，也是最容易被过度解读的结果。**配对** McNemar 检验显示
@@ -70,6 +76,9 @@ NNRT 通路上，36 个单算子探针有 16 个**单独构图时被拒**——�
 | 牌长代价 | **−6.6 pp** | 逐省对照已排除省份构成 | T13 |
 | 省份位占替换错误 | **49.3 %**（33/67） | 等长行 n=971 | `scene_green_rec.log` |
 | CANN 算子准入 | **51/51** | 含 NNRT 侧被拒的 9 个 | `op_collide.csv` |
+| 车辆检测器：**转换期**被拒 | **两种架构里 1 种** | `v5-u`（含 DFL）失败；原版 anchor-based v5 裁掉解码头后干净通过 | `_veh/yolov5su_320_fp32.convert.log` |
+| 车辆检测器落点 | **`NNRT:NPU_ohos.boot.hardware.kirin8020_v2_0`**，无 fallback | 裸头，320×320，`req=nnrt`，MIA-AL00 | `_veh/devlog_T8V7.txt` |
+| 车辆检测器：NPU vs 同栈 CPU | **7.79×**（5.39 ms vs 42.02 ms） | **仅裸头** —— 不含预处理、解码、NMS | `_veh/devlog_T8V7.txt` |
 | 帧预算：检测段 vs 识别段 | **49 % / 10 %** | 生产档，检出帧 | `camera_summary.md` |
 | 隔离基准 vs 流水线内 | **7.4 ms vs 19.5–31.6 ms** | 同模型、同后端、同线程数 | `camera_gap_sweep.log` |
 | 持续负载下的延迟漂移 | **+26.9 %** | 23.3 分钟 / 80 轮，**热档全程不变** | `rq4_thermal_80r.csv` |
@@ -88,6 +97,12 @@ NNRT 通路上，36 个单算子探针有 16 个**单独构图时被拒**——�
   CPU 有两套。可比的只有**同栈内比值**；每张表都带「框架」列。
 - **不主张「GPU 加速」。** Vulkan 上实测三个模型都比 CPU 慢；诚实的表述是
   「通路成立且数值保真」。
+- **车辆检测那个加速比是「裸头」数，不是「流水线」数。** 5.39 ms 是三个裸输出张量上的
+  纯推理，**不含** letterbox 预处理、anchor 解码与 NMS。**不得**拿它去除以别处测到的
+  in-pipeline 73 ms —— 那 73 ms 里有 NPU 加速不了的部分。**可比基线是同栈 CPU 裸头
+  42.02 ms。**
+- **这个 NPU 车辆检测器还没有接进流水线。** 它的作用只是确立「这一阶段**能**落到加速器上」。
+  真正接入要把 sigmoid 与 anchor 解码搬到 Host 侧 —— 那是另一件需要先写 spec 的活，尚未做。
 - **`arrive == done` 不能推出「流水线跟得上相机」。** 背压之下被顶掉的帧**从未投递**，
   因此不计入 `dropped`。要区分必须与「只取帧不推理」的档位对照。
 - **本仓库里有两次我们推翻自己的结论**（T10 → T12、T11 → T14），
@@ -133,6 +148,28 @@ bash build.sh assembleHap
 [`tools/convert_ms.sh`](https://github.com/YangShusen2001/lpr-kirin8020-app/blob/main/tools/convert_ms.sh)
 转成 `.ms`；工具链与磁盘来源记录在
 [`docs/notes/toolchain-and-sources-on-disk.md`](docs/notes/toolchain-and-sources-on-disk.md)。
+
+车辆检测器的移植（T8）是三步流水线 —— 导出、裁切、转换：
+
+```bash
+# 1. 导出**原版** anchor-based YOLOv5（v7.0 tag）。PyPI 的 `yolov5` 轮子**不可用**
+#    （两个原因，见脚本头注释），所以必须克隆带 tag 的源码：
+git clone --depth 1 --branch v7.0 https://github.com/ultralytics/yolov5.git \
+    _veh/third_party/yolov5
+python _veh/export_yolov5_v7.py --weights <yolov5s.pt> --imgsz 320
+
+# 2. 把 Detect 头切在最后一个 rank-4 张量上，并**证明裁切没改语义**：
+#    脚本会同时跑原图与裁切图，逐元素比对。
+python _veh/cut_yolov5_head.py --src _veh/yolov5s_v7_320.onnx
+
+# 3. 转 MindSpore Lite，并把转换器完整日志留作证据。
+python _veh/convert_onnx_to_ms.py --onnx _veh/yolov5s_v7_320_npu.onnx \
+    --tag yolov5s_v7_320_npu --out-dir _veh
+```
+
+`tools/convert_ms.sh` 与 `_veh/convert_onnx_to_ms.py` **不是重复**：前者用硬编码的 job 表
+复现三个生产模型、并把产物与 App 内置的 `.ms` 逐字节比对；后者转任意 ONNX，且**完整保留
+转换器日志**（T8 的判据依赖告警行，`tail -4` 会把它们截掉）。
 
 ## 前期工作
 

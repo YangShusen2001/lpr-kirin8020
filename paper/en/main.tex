@@ -121,7 +121,10 @@ CANN path, the same family of probes passes 51/51. We further characterise the
 mechanism---operators rejected in isolation are still carried onto the NPU as
 fusion neighbours of an adjacent convolution---and are explicit that this
 mechanism is currently supported by correlation, not by a controlled causal
-experiment (\S\ref{sec:operators}).
+experiment. We then show the boundary has engineering consequences: moving a
+production pipeline stage off the CPU required re-architecting the model, and the
+same task failed conversion outright under one architecture while landing on the
+NPU under another (\S\ref{sec:operators}).
 
 \item \textbf{C3 --- A layered answer to ``should I re-validate after switching
 backends?''.} Over 1{,}000 real vehicle images, switching the recogniser's
@@ -304,6 +307,55 @@ production configuration, MindSpore Lite was in fact faster than CANN for the
 recognition model ($3.99$\,ms against $5.19$\,ms). The CANN-side latencies were
 collected with three repetitions and no warm-up and are therefore used for
 ordering only, never quoted as measurements.
+
+\subsection{From probes to a production stage: gaining admission by re-architecting}
+
+Operator probes establish \emph{where} the boundary lies. A more useful question
+is what crossing it costs in practice. We answer it with one stage of the
+pipeline studied in \S\ref{sec:pipeline}: vehicle detection, which dominates the
+frame budget and is therefore the stage whose placement matters most.
+
+The same task was implemented under two model architectures and compiled with
+the same converter. The first, an ultralytics \texttt{v5-u} detector whose head
+contains a distribution-focal-loss (DFL) projection, \emph{cannot be converted
+at all}: shape inference fails on the DFL convolution
+(\texttt{InferShapeByNNACL for op: /model.24/dfl/conv/Conv failed}) and the
+converter aborts. This is not a tuning problem --- the DFL head's permutation is
+part of the architecture.
+
+The second architecture, the original anchor-based YOLOv5, is admissible but not
+by default. Exported naively it fails the static gates: its detection head
+performs \texttt{view}$\rightarrow$\texttt{permute}$(0,1,3,4,2)$ and carries
+sigmoid and anchor-grid decoding on rank-5 tensors, whereas the compiler admits
+only rank $\le 4$ and the permutation $[0,1,3,2]$. The failure is however
+\emph{repairable}, because it lies in the decode stage rather than in the
+architecture: cutting the graph at the last rank-4 tensor --- the head
+convolution output --- and moving sigmoid and anchor decoding to the host leaves
+a graph with no transposition and no tensor above rank 4. We verified the cut is
+semantics-preserving by running both graphs under a common runtime and comparing
+the decoded outputs element-wise (maximum relative deviation
+$1.9\times10^{-5}$, i.e.\ float32 accumulation noise).
+
+The re-architected detector converts cleanly, with no warnings, and lands on the
+NPU: the observed backend string is
+\texttt{NNRT:NPU\_ohos.boot.hardware.kirin8020\_v2\_0} with no fallback.
+Bare-head latency is $5.39$\,ms against $42.02$\,ms for the same model on the
+same stack's CPU, a ratio of $7.79\times$. Landing is self-evidenced twice over:
+from the backend string, and from the fact that the NPU and CPU checksums
+differ --- had the request silently fallen back, both would be bit-identical.
+
+Two boundaries apply. First, these are \emph{bare-head} figures: they exclude
+letterbox pre-processing, anchor decoding and non-maximum suppression, and must
+not be divided into the in-pipeline figure of \S\ref{sec:pipeline}, which
+contains work the accelerator does not perform. Second, the detector is not yet
+integrated: its outputs are raw head tensors, and wiring it in is separate work.
+
+The lesson generalises past this stage. An operator list describes the
+\emph{hardware}; admission is decided by the (model, toolchain) pair; and where
+the model is at fault, the fault may be architectural --- as with DFL, where no
+rewriting of the graph helps --- or merely positional, as with a decode head,
+which can be moved off the accelerator's critical path. Only the second is a
+conversion problem.
 
 % ============================================================================
 \section{Case Study: A Four-Stage Licence-Plate Pipeline}

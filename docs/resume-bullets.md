@@ -34,6 +34,11 @@
 - 证明 **NPU 支持性是「模型 × 工具链」的联合属性，不是硬件属性**：同一批 51 个算子探针，
   NNRT 侧 36 个里有 16 个单独构图被拒（含 ReLU / Softmax / MaxPool），
   CANN 侧 **51/51 全部通过** —— 含 `ConvTranspose`，它在 NNRT 侧**连模型都转换不出来**。
+  并把这条从探针推到**生产阶段**：为把车辆检测从 CPU 挪到 NPU，同一任务换架构 ——
+  ultralytics `v5-u`（含 DFL）**转换即失败**；原版 anchor-based YOLOv5 在**裁掉解码头**
+  （把 sigmoid 与 anchor 解码移到 Host）之后静态门全过、真机落 NPU
+  （裸头 5.39 ms vs 同栈 CPU 42.02 ms，**7.79×**），且裁切经**逐元素比对自证语义未变**
+  （相对误差 1.9e-5）。**同一任务、同一工具链、两种架构 —— 一种被拒、一种准入。**
 
 - 用**剂量-反应 + 忙等对照 + 线程数对照**三组实验，把「隔离基准 7.4 ms vs 流水线内
   19.5–31.6 ms」的 2 倍差距定位为 **DVFS 频率 + 线程池唤醒**两个叠加机理；
@@ -51,7 +56,8 @@
   **牌长代价大一个数量级**（8 字符 92.5% vs 7 字符 99.1%）。
 
 - 证明 NPU 支持性是**模型 × 工具链**的联合属性：NNRT 侧 16/36 算子单独构图被拒，
-  CANN 侧 51/51 全通过。
+  CANN 侧 51/51 全通过。并把这条推到生产阶段：同一任务换架构后，一种**转换即失败**、
+  一种裁掉解码头后**真机落 NPU**（裸头 5.39 vs 42.02 ms，**7.79×**）。
 
 ### 技能标签
 
@@ -94,7 +100,14 @@
 - Proved that **NPU supportability is a model × toolchain joint property, not a hardware
   property**: of 36 single-operator probes, 16 are rejected when compiled standalone on the
   NNRT path (including `ReLU`, `Softmax`, `MaxPool`), while the CANN path passes **51/51** —
-  including `ConvTranspose`, which **cannot even be converted** on the NNRT side.
+  including `ConvTranspose`, which **cannot even be converted** on the NNRT side. Carried
+  this from probes to a **production stage**: to move vehicle detection off the CPU, the same
+  task was re-architected — ultralytics `v5-u` (DFL head) **fails conversion outright**,
+  whereas the original anchor-based YOLOv5 clears the static gates once its decode head is
+  cut away (sigmoid and anchor decoding moved to the host) and then lands on the NPU
+  (**5.39 ms** bare head vs **42.02 ms** on the same stack's CPU, **7.79×**). The cut was
+  shown to be semantics-preserving by element-wise comparison (relative error 1.9e-5).
+  *Same task, same toolchain, two architectures — one rejected, one admitted.*
 
 - Localised a **2× gap between isolated microbenchmarks and in-pipeline cost** (7.4 ms vs
   19.5–31.6 ms) to DVFS frequency scaling plus thread-pool wake-up latency, using a
@@ -115,7 +128,9 @@
   (8-char 92.5 % vs 7-char 99.1 %).
 
 - Proved NPU supportability is a **model × toolchain** joint property: 16/36 operators are
-  rejected standalone on NNRT while **51/51** pass on CANN.
+  rejected standalone on NNRT while **51/51** pass on CANN. Carried it to a production
+  stage: the same task re-architected — one model **fails conversion**, the other lands on
+  the NPU once its decode head is cut (**5.39** vs **42.02 ms** bare head, **7.79×**).
 
 ---
 
@@ -159,6 +174,9 @@
 | 牌长代价 | **−6.6 pp** | 逐省对照已排除省份构成 |
 | 省份位占替换错误 | **49.3%**（33/67） | 等长行 n=971 |
 | CANN 算子准入 | **51/51** | 含 NNRT 侧被拒的 9 个 |
+| 车辆检测换架构后落点 | **NPU，无 fallback** | `NNRT:NPU_ohos…kirin8020_v2_0`，MIA-AL00 |
+| 车辆检测裸头 NPU vs 同栈 CPU | **7.79×** | 5.39 vs 42.02 ms —— **仅裸头**，不含预处理/解码/NMS |
+| 同一任务、两种架构的转换结果 | **1 被拒 / 1 通过** | v5-u（DFL）转换即失败；原版 v5 裁掉解码头后通过 |
 | 帧预算：检测 / 识别 | **49% / 10%** | 生产档检出帧 |
 | 隔离基准 vs 流水线内 | **7.4 vs 19.5–31.6 ms** | 同模型/后端/线程数 |
 | 持续负载漂移 | **+26.9%** | 23.3 min / 80 轮，热档不变 |
@@ -172,3 +190,5 @@
 > 我用三个日志字段加一个张量指纹把这件事变成可读的，然后拿它测出了三件事：
 > 换后端几乎不改输出但确实是准确率变量、算子能不能上 NPU 取决于工具链而不是硬件、
 > 以及这条流水线上真正吃帧预算的其实是 CPU 上的检测段而不是 NPU。
+> 最后我把这个结论用回了工程：那一段要上 NPU，**必须换模型架构** ——
+> 同一个任务，一种架构连转换都过不去，另一种裁掉解码头之后真机落 NPU、快 7.79×。

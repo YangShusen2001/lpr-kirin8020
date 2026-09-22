@@ -50,7 +50,13 @@ Taken at face value, that says the accelerator cannot execute a rectifier. On th
 path, 51/51 probes pass every gate, including all nine operators the NNRT path rejects.
 `ConvTranspose` cannot be *converted at all* on the NNRT side, and converts and runs on
 the CANN side. The same ONNX file fails to produce a model on one path and runs on the
-other.
+other. T8 carries this from probes to a **production stage**: to move vehicle detection
+off the CPU, the same task was re-architected (ultralytics `v5-u` → original anchor-based
+YOLOv5). The `v5-u` head cannot even be *converted*
+(`InferShapeByNNACL for op: /model.24/dfl/conv/Conv failed`); the original architecture
+clears the static gates once its decode head is cut away, and then lands on the NPU at
+**7.79×** its own same-stack CPU time. Same task, same toolchain, two architectures — one
+rejected, one admitted.
 
 **3 · Which knob actually matters.**
 Over 1,000 real vehicle images, switching the recogniser's backend changed **no** output
@@ -80,6 +86,9 @@ which fails if a declared value no longer matches its source. See
 | Plate-length cost | **−6.6 pp** | province-matched control | T13 |
 | Province share of substitution errors | **49.3 %** (33/67) | equal-length rows, n=971 | `scene_green_rec.log` |
 | CANN operator admission | **51/51** | incl. 9 rejected by NNRT | `op_collide.csv` |
+| Model rejected at *conversion* time | **1 of 2** vehicle-detector architectures | `v5-u` (DFL) fails; original anchor-based v5 converts cleanly once the decode head is cut | `_veh/yolov5su_320_fp32.convert.log` |
+| Vehicle detector lands on the NPU | **`NNRT:NPU_ohos.boot.hardware.kirin8020_v2_0`**, no fallback | bare head, 320×320, `req=nnrt`, MIA-AL00 | `_veh/devlog_T8V7.txt` |
+| Vehicle detector, NPU vs same-stack CPU | **7.79×** (5.39 ms vs 42.02 ms) | **bare head only** — excludes pre-processing, decoding, NMS | `_veh/devlog_T8V7.txt` |
 | Frame budget: detection vs recognition | **49 % / 10 %** | production config, detected frame | `camera_summary.md` |
 | Isolated probe vs in-pipeline cost | **7.4 ms vs 19.5–31.6 ms** | same model, backend, thread count | `camera_gap_sweep.log` |
 | Latency drift under sustained load | **+26.9 %** | 23.3 min / 80 rounds, thermal level **unchanged** | `rq4_thermal_80r.csv` |
@@ -102,6 +111,14 @@ This section is the point of the repository as much as the numbers are.
   comparable; every table carries its framework.
 - **No "GPU acceleration" claim.** Measured on Vulkan, all three models were *slower*
   than CPU; the honest statement is that the path works and is numerically faithful.
+- **The vehicle-detector speed-up is a bare-head number, not a pipeline number.** 5.39 ms
+  is pure inference over the three raw head tensors; it excludes letterbox pre-processing,
+  anchor decoding and NMS. It must **not** be divided into the in-pipeline 73 ms measured
+  elsewhere — that figure contains work the NPU does not accelerate. The comparable
+  baseline is the same-stack CPU bare head, 42.02 ms.
+- **The NPU vehicle detector is not integrated into the pipeline.** It exists to establish
+  that this stage *can* land on the accelerator. Wiring it in means moving sigmoid and
+  anchor decoding to the host — separate, spec-first work, not yet done.
 - **`arrive == done` does not mean the pipeline keeps up.** Under back-pressure the
   discarded frames are never delivered and therefore never counted as dropped. The
   distinction requires a control that acquires frames without inference.
@@ -149,6 +166,29 @@ Models are **not** in this repository. The three ONNX models are converted to `.
 [`tools/convert_ms.sh`](https://github.com/YangShusen2001/lpr-kirin8020-app/blob/main/tools/convert_ms.sh);
 the documented toolchain and the on-disk sources are recorded in
 [`docs/notes/toolchain-and-sources-on-disk.md`](docs/notes/toolchain-and-sources-on-disk.md).
+
+Reproducing the vehicle-detector port (T8) is a three-step pipeline — export, cut, convert:
+
+```bash
+# 1. Export the ORIGINAL anchor-based YOLOv5 (v5.0 release). The PyPI `yolov5` wheel
+#    is NOT usable (two reasons, see the script header), so clone the tagged source:
+git clone --depth 1 --branch v7.0 https://github.com/ultralytics/yolov5.git \
+    _veh/third_party/yolov5
+python _veh/export_yolov5_v7.py --weights <yolov5s.pt> --imgsz 320
+
+# 2. Cut the Detect head at its last rank-4 tensor, then prove the cut changed nothing:
+#    the script re-runs the original graph and the cut graph and compares element-wise.
+python _veh/cut_yolov5_head.py --src _veh/yolov5s_v7_320.onnx
+
+# 3. Convert to MindSpore Lite, keeping the full converter log as evidence.
+python _veh/convert_onnx_to_ms.py --onnx _veh/yolov5s_v7_320_npu.onnx \
+    --tag yolov5s_v7_320_npu --out-dir _veh
+```
+
+`tools/convert_ms.sh` and `_veh/convert_onnx_to_ms.py` are **not duplicates**: the former
+reproduces the three production models against a hard-coded job table and diffs the result
+byte-for-byte against the app bundle; the latter converts an arbitrary ONNX and captures
+the complete converter log (T8's verdict depends on warnings that `tail -4` would drop).
 
 ## Prior work
 

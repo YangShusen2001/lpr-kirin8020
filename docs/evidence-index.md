@@ -69,6 +69,47 @@ T11 裁剪图裸喂 75/77 · T12 真实场景 9 张里 5 张 · T13 8 字符 33/
 > ⚠️ 2.1 只证明**准入边界**，**不证明 CANN 更快**。生产档实测 MS Lite 在识别器上更快
 > （rec 3.99 vs 5.19 ms）。且 `.om` 侧每条只跑 3 次、无热身，**延迟只可排序不可引用**。
 
+### 2.5 车辆检测换架构后上 NPU（T8，2026-09-22）
+
+**为什么单列**：2.1–2.4 是**单算子探针**的准入边界；2.5–2.10 是**同一个门**在一个
+真实流水线阶段上的后果 —— 同一个任务（车辆检测）、同一个工具链，两种模型架构，
+一种在转换期就被拒、另一种跑通并落到 NPU。这是「支持性是 模型×工具链 联合属性」
+从探针升级到生产阶段的实例。
+
+背景：ROI 路径的**下限是车辆检测**（in-pipeline 73 ms，见 §3），去重/top-N 省不了它，
+唯一有量级收益的方向是换落点。而现用车辆模型是 ultralytics 的 **v5-u（含 DFL）**。
+
+| # | 数字 | 条件 | 证据 | 守卫项 |
+|---|---|---|---|---|
+| 2.5 | v5-u **转换期即失败**：`InferShapeByNNACL for op: /model.24/dfl/conv/Conv failed` → `Convert model failed` | MS Lite converter 2.6.0，`--fmk=ONNX`，320 | `_veh/yolov5su_320_fp32.convert.log` | ✅ |
+| 2.6 | 原版 anchor-based YOLOv5 v7.0 裸导出**静态门不过**：3×`Transpose perm=[0,1,3,4,2]`（rank-5） | 输入 `1×3×320×320` | `_veh/yolov5s_v7_320.onnx` | ✅ |
+| 2.7 | **裁掉解码头后两条硬门全过**：rank ≤ 4、`Transpose 共 0 个` | 切在 `/model.24/m.{i}/Conv_output_0` | `_veh/yolov5s_v7_320_npu.onnx` | ✅ |
+| 2.8 | 裁切保真：与原图逐元素**相对误差 1.92e-05** | 原图 ORT `output0` ↔ 裁切图 ORT + numpy 复现解码 | `_veh/cut_yolov5_head.py` 运行输出 | ✅ |
+| 2.9 | 转换**成功且日志零告警**（fp32 与 fp16 各一份） | 同上，2.6.0 | `_veh/yolov5s_v7_320_npu_fp{32,16}.convert.log` | ✅ |
+| 2.10 | 真机落点 **`NNRT:NPU_ohos.boot.hardware.kirin8020_v2_0`**，`req=nnrt`、`fallback=` 空 | MIA-AL00 / API 24 | `_veh/devlog_T8V7.txt` | ✅ |
+| 2.11 | 裸头延迟 **NPU 5.392 ms vs 同栈 CPU 42.016 ms = 7.79×** | 同引擎 MS Lite，唯一变量是后端，fp32 | `_veh/devlog_T8V7.txt` | ✅ |
+| 2.12 | fp16 变体 **NPU 5.537 ms vs CPU 41.646 ms = 7.52×** | 同上 | `_veh/devlog_T8V7.txt` | ✅ |
+
+**落点自证两条**（沿用 §0 规则 1 的允许形态，不用利用率）：
+
+1. `landed` 逐字回 `NNRT:NPU_ohos.boot.hardware.kirin8020_v2_0`，且 `fallback=` 为空。
+2. 同一模型 nnrt 与 cpu 的 checksum **不同**（`L2=3491.7710` vs `3492.3102`，
+   `maxAbs=17.4844` vs `17.5216`）。若 nnrt 静默回落 CPU，两者必须**逐位相同**。
+
+> ⚠️ **2.11/2.12 的口径边界（引用前必读）**：这两个数是**纯推理裸头**，不含 letterbox
+> 预处理、anchor 解码与 NMS。**不得与 §3 的 in-pipeline 73 ms 相除当加速比** ——
+> 73 ms 里预处理/解码/NMS 那部分不会被 NPU 加速。同轮同口径的 CPU 裸头是 42.016 ms，
+> **那才是可比基线**。
+
+> ⚠️ **2.10–2.12 尚未接入车辆流水线。** 本轮模型只用于基准对照；裸头只吐
+> `(1,255,H,W)`，sigmoid 与 anchor 解码需落到 Host 侧实现，接入另开票且先有 spec。
+
+> 📌 **未解释的观察**（不写成结论）：fp16 与 fp32 在 nnrt 档 checksum 完全相同
+> （cpu 档不同）。可能是 NPU 内部按 fp16 执行、两份模型落到同一套 kernel —— **无证据**。
+
+> 📌 **许可提醒**：原版 YOLOv5 v7.0 仓库是 **GPL-3.0**；ultralytics 8.x 的 v5-u 权重是
+> **AGPL-3.0**。两者不是一回事，对外文档必须分开写（README 的 Per-asset licences 已分列）。
+
 ## 3. 性能与热特性（RQ4）
 
 | # | 数字 | 条件 | 证据 | 守卫项 |
