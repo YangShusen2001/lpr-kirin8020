@@ -219,9 +219,9 @@ Numbers inherited from them are marked as such in
 
 | Repository | Contribution |
 |---|---|
-| [shusen-npu-characterization](https://github.com/YangShusen2001/shusen-npu-characterization) | L1 operator matrix, L2 model suite, roofline, INT8 form conclusions, vendor ticket chain |
-| [lpr-showcase](https://github.com/YangShusen2001/lpr-showcase) | Evidence layer: 1,000-image ground-truth set, raw probe logs, archived prior manuscript |
-| [lpr-harmony](https://github.com/YangShusen2001/lpr-harmony) | Prior application source, used as the rewrite baseline |
+| [shusen-npu-characterization](https://github.com/YangShusen2001/shusen-npu-characterization) | L1 operator matrix, L2 model suite, roofline, INT8 form conclusions, vendor ticket chain — **archived (read-only)** |
+| [lpr-showcase](https://github.com/YangShusen2001/lpr-showcase) | Evidence layer: 1,000-image ground-truth set, raw probe logs, archived prior manuscript — **archived (read-only)** |
+| [lpr-harmony](https://github.com/YangShusen2001/lpr-harmony) | Prior application source, used as the rewrite baseline — **archived (read-only)** |
 
 ## License and third-party assets
 

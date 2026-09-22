@@ -198,9 +198,9 @@ python _veh/convert_onnx_to_ms.py --onnx _veh/yolov5s_v7_320_npu.onnx \
 
 | 仓库 | 贡献 |
 |---|---|
-| [shusen-npu-characterization](https://github.com/YangShusen2001/shusen-npu-characterization) | L1 算子矩阵、L2 模型套件、Roofline、INT8 形态结论、厂商工单链 |
-| [lpr-showcase](https://github.com/YangShusen2001/lpr-showcase) | 证据层：1000 张真值集、原始探针日志、已归档的旧论文稿 |
-| [lpr-harmony](https://github.com/YangShusen2001/lpr-harmony) | 前期 App 源码，用作重写基线 |
+| [shusen-npu-characterization](https://github.com/YangShusen2001/shusen-npu-characterization) | L1 算子矩阵、L2 模型套件、Roofline、INT8 形态结论、厂商工单链——**已归档（只读）** |
+| [lpr-showcase](https://github.com/YangShusen2001/lpr-showcase) | 证据层：1000 张真值集、原始探针日志、已归档的旧论文稿——**已归档（只读）** |
+| [lpr-harmony](https://github.com/YangShusen2001/lpr-harmony) | 前期 App 源码，用作重写基线——**已归档（只读）** |
 
 ## 许可与第三方资产
 
