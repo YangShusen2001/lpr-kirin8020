@@ -180,13 +180,268 @@ YOLOv5 是 **AGPL-3.0**。权重入库需标注许可，公开作品集仓库须
 | # | 工单 | 依赖 |
 |---|---|---|
 | T1 | 恢复 `CameraPage.ets` 与相机相关配置（不改造，先跑通原功能） | — |
-| T2 | 车辆检测 ONNX → ncnn 转换 + 端侧接口（`vehicleDetectAsync`） | — |
+| T2 | 车辆检测 ONNX → **.ms** 转换 + 端侧接口（`vehicleDetectAsync`） | — |
 | T3 | native/ArkTS 侧 ROI 裁剪 + 坐标映射 | T2 |
 | T4 | ROI 路径串联（车框 → 逐框车牌检测 → 合并去重） | T2, T3 |
 | T5 | 界面：车辆框 + 车牌→车辆归属 + 两路径切换 | T1, T4 |
 | T6 | 真机端到端验证 + 计时/性能实测（A1–A5） | T5 |
 | T7 | 门禁 + 许可标注（A6, A8） | 全部 |
 | T8 | 换原版 anchor-based YOLOv5 + NPU 转换（二期，独立） | — |
+
+## 九·补、T2 实施记录与路线修订（2026-09-22）
+
+### 修订 1：T2 的转换目标由 **ncnn** 改为 **MindSpore Lite `.ms`**
+
+票面原写「车辆检测 ONNX → ncnn 转换 + 端侧接口」。实施时摸排发现两件事，
+路线因此改掉，且**不是偏好问题**：
+
+1. **本项目的 CPU 通路本来就是 MS Lite + `.ms`**。`LprSessions::det` 走的是
+   `y5fu_320x_head_fp32.ms`，而且它**本来就在 CPU**（ADR-004 §4.1：NPU 判否）。
+   ncnn 在本项目只服务 GPU/Vulkan 档（ADR-008）。为 T2 一期新引入 ncnn
+   等于**多一条并行通路要维护**，而不是「复用现成通路」。
+2. **真正的障碍是 DFL，它对两条路线都挡**。`yolov5su`（YOLOv5u/ultralytics）的
+   DFL 头里有两个 `perm != [0,1,3,2]` 的 Transpose：
+
+   | 节点 | perm |
+   |---|---|
+   | `/model.24/dfl/Transpose` | `[0,3,1,2]` |
+   | `/model.24/dfl/Transpose_1` | `[0,3,2,1]` |
+
+   MindSpore Lite 的 `InferShapeByNNACL` 直接在 `/model.24/dfl/conv/Conv` 上失败
+   （`Transform meta graph failed! ret = -500`），**连 CPU 的 `.ms` 都产不出来**；
+   `tools/scan_onnx.py` 独立印证同一处（两条 NPU 硬门的第 2 条）。
+
+   所以无论走 ncnn 还是 `.ms`，DFL 都得先改写 —— 这是先决条件，不是路线分歧。
+
+**修订后的路线**：改写 DFL → 转 `.ms` → 走已有的 MS Lite CPU 通路。
+与现有 `det=CPU` 完全一致；且 DFL 里的两个 Transpose 一并消失，
+**T8 的 NPU perm 硬门也顺带清了**（`scan_onnx.py` 由「2 个 NOT SUPPORTED」变为 0）。
+
+### 改写怎么做：`_veh/patch_dfl.py`
+
+DFL 的数学是「对 16 个 bin 做 softmax，再按 0..15 加权求和」，两个 Transpose 只是
+把待归一化的轴搬到最后一维的搬运工。改写采用**最小差分**：
+
+- 删 4 个节点：`Transpose` / `Softmax` / `Transpose_1` / `conv/Conv`
+- 加 7 个节点：`ReduceMax → Sub → Exp → Mul(bins=arange(16)) → ReduceSum(分子)
+  → ReduceSum(分母) → Div`
+- 只重接 1 处输入：`/model.24/dfl/Reshape_1` 的 input[0]
+
+保留 `Reshape_1` 不动 ⇒ 最终张量名 `/model.24/dfl/Reshape_1_output_0` 不变，
+它的 3 个消费者（`Shape` / `Slice` / `Slice_1`）一个都不用碰，
+输出 `output0 [1,84,2100]` **格式不变**。
+
+### 三个必须记下来的坑
+
+1. **opset ≤ 12 的 `Softmax` 是「coerced-2D」语义，不是「沿给定轴归一化」。**
+   它把 `[0,axis)` 压成一维、`[axis,rank)` 压成另一维，对**后一维**做 softmax。
+   在 `[1,4,16,2100]` 上写 `Softmax(axis=2)`，实际算的是「4 行 × 33600 的 softmax」——
+   本机实测与正确结果差 **1.0**（完全错）。**这正是 ultralytics 当初非要插
+   `Transpose[0,3,1,2]` 的原因**：opset 12 下只有把轴搬到最后一维才写得出 softmax。
+   （opset 13 才改成沿轴语义。）⇒ 不用 `Softmax` 算子，改用手工形式。
+2. **必须减最大值（`ReduceMax`/`Sub`）**。DFL 的 logits 后面没有激活函数压着，
+   实测在 0..255 的随机图上**裸 `Exp` 直接溢出成 `inf`**，随后 `inf/inf = NaN`。
+3. **自证门禁自己会撒谎**：`worst = max(worst, nan)` 在 Python 里返回 `worst`
+   （因为 `nan > worst` 为假），于是「输出全是 NaN」会被**静默判成通过**。
+   必须先查 `isfinite` 再比大小。这条比模型错误更危险 —— 是**验证工具**在骗人。
+
+正确性判据不是「读图读对了」，而是**数值自证**：`patch_dfl.py` 用 onnxruntime 在
+同一输入上跑原图与改后图，逐元素比对，判据是 `|a-b| ≤ 1e-6 + 1e-5·|a|`（3 个随机图）。
+**不过就不落盘。** 实测归一化误差 0.18~0.22（预算 1.0，余量 5×）。
+
+（另：判据**必须**用相对形式。`output0` 的 box 通道是像素量纲，box decode 会乘上
+stride（最高 32），而 DFL 自身只有 0..15 的量级；手工 softmax 与算子 softmax 的
+fp32 舍入差 ~4e-6 乘 stride 后就是 ~1.2e-4 —— 用绝对阈值会把纯浮点舍入误判成错误。）
+
+### 端侧接口的验收口径（T2）
+
+票面要求「PC 侧与 native 侧在同一张图上结果一致」。做法上有一处关键设计：
+
+**测试图恰好取 320×320。** 源图等于 letterbox 目标尺寸时 `r=1`、`left=top=0`，
+letterbox 退化成**逐字节拷贝** —— 两侧看到的模型输入是同一串字节，
+把「两侧插值实现差异」这个不可控变量从等式里消掉，剩下的差异只可能来自解码。
+（若源图尺寸不等于 320，native 的手写双线性与 PC 的 PIL 本来就不会逐位相同，
+「结果不一致」会变成分不清是解码写错还是插值差异的糊涂账。）
+
+对照工具：`_veh/veh_ref.py`（PC 侧参考解码 + 真机 hilog 解析 + 贪心配对比对）。
+设备侧证据走 `hilog`（一行汇总 + **每框一行**，绕开单条 hilog 的长度上限），
+不走 App 私有目录 —— 那个 hdc 拉不出来。
+
+### 真机侧对照结果（2026-09-22，已完成）
+
+真机 `MIA-AL00` / HarmonyOS 6.1.0.135 / API 24，
+`LANDED=CPU`（`trail=[CPU(ok)]`，无回退）。
+
+```
+[veh_ref] 设备日志含 2 轮，取最后一轮；各轮框数 [5, 5]
+[veh_ref] 各轮框逐元素一致：是（可复现）
+[veh_ref] 设备: count=5 truncated=0 conf=0.050000 iou=0.500000 vehicleOnly=1 size=320 nhwc=1 inferMs=48.535469 backend=CPU
+[veh_ref] PC  : count=5 truncated=False conf=0.0500 iou=0.5000 vehicle_only=True size=320
+
+[veh_ref] 配对 5 / PC 5 / 设备 5
+[veh_ref] 坐标最大偏差 = 0.0000 px（中位 0.0000）
+[veh_ref] 分数最大偏差 = 1.73e-06（中位 7.26e-07）
+[veh_ref] 最小配对 IOU   = 0.999998
+
+[veh_ref] ✓ PC 与设备结果一致（数量、类别、坐标、分数都在容差内）
+```
+
+⇒ 票面「PC 侧与 native 侧在同一张图上结果一致」**达成**。
+坐标偏差停在 fp32 舍入量级、分数偏差 1.7e-06，说明两侧差异**纯粹来自浮点**，
+不含任何解码 / letterbox 层面的语义差异。
+
+**门限为什么取 0.5 px / 1e-3**：实测值是 0.0000 px 与 1.73e-06，门限各留约 4 个数量级余量；
+而一旦「通道优先 `raw[c*anchors + a]`」或 letterbox 反变换写错，框会**整体移位几十 px**，
+绝不会停在 0.5 px 以内 —— 松到不误杀浮点噪声，紧到抓得住真错。
+
+**顺带得到的两条证据**：
+- 同一张图连跑两轮（预热 + 正式读）**逐元素一致** ⇒ 端侧推理可复现。
+- 冷启动 `inferMs` 66.5 ms → 热态 48.5 ms（`totalMs` 69.1 → 49.6 ms），给 T6 的性能实测留了基线。
+
+复现命令：
+
+```
+python _veh/veh_ref.py --compare --ref-json _veh/veh_ref.json --device-log _veh/devlog_VEH.txt
+```
+
+### 驱动与比对的坑（T2 实测踩到，已修进工具）
+
+1. **锁屏判据不能用泛化的 `lock`。** 第一版把 `lock` 当锁屏标记，结果命中
+   `ClockStatusView` / `clock_home_row` / `TextClock` —— **"Clock" 含 "lock"**，
+   设备明明已解锁却被判 `LOCKED`。改用专有词（`Digital_PSD_Input` / `ScreenLock` / `未识别成功` …）。
+   **真正的锁屏判据是布局树的 bundle 归属**：出现 `com.shusen.lprdemo` 就是在自己的 App 里；
+   只有 `com.ohos.sceneboard` 才可能是锁屏或桌面。
+2. **比对脚本必须按「轮」切日志。** App 是「预热一次 + 正式读一次」，hilog 里因此有
+   **两整轮相同的框**。不切轮 → 同一批框被数成两批 → 贪心配对只消耗一半 →
+   剩下一半被误报成「设备独有 5」，看起来像模型错，实际是解析错。
+   修完后同一个日志从「✗ 设备独有 5」变成「✓ 5/5 全配对」。
+3. **`--ref` 在 `veh_ref.py` 里是「产出参考」的布尔开关**，不是路径。
+   待比对的参考文件走 `--ref-json`（默认 `_veh/veh_ref.json`）。早先 `cmd_compare`
+   误把 `a.ref` 当路径 `open()`，是脚本自身的 bug，已修。
+
+真机驱动统一走 `_veh/dev.py`（`state` / `layout` / `struct` / `start` / `tap` / `swipe` /
+`log` / `logclear` / `ps`）—— 用 Python 取回 hdc 输出，避免 PowerShell 管道按遗留代码页
+重解码中文。
+
+### 已知未完成
+
+- **`.ms` 的 PC 侧逐元素保真度没能验证**：MS Lite 自带的 `benchmark.exe` 能加载能跑
+  （`PrepareTime ≈ 66–76 ms`），但它的 accuracy 对照是**按输出张量名**取数据的，
+  本模型在 unified API 下 `GetOutputTensorNamesChar()` 返回**空名** ⇒
+  `Model does not contains tensor .`，必然失败（换 `--modelType=MindIR_Lite` 也一样）。
+  详见 `_veh/ms_fidelity_check.py` 的「实测结论」。⇒ 该项改由**真机侧**对照覆盖。
+  顺带记录：黄金数据的 flag 是 `--benchmarkDataFile`（**不是** `calibDataFile`）。
+- ~~**真机侧对照尚未执行**~~ → **已于 2026-09-22 完成**，见上「真机侧对照结果」。
+  （当时卡点是设备处于数字 PIN 锁屏，`aa start` 报 `Error Code:10106102`；人工解锁后即跑通。）
+
+### 已通过的门禁与产物
+
+| 项 | 结果 |
+|---|---|
+| `_veh/patch_dfl.py` 数值自证 | ✓（归一化误差 0.18~0.22 / 预算 1.0） |
+| `tools/scan_onnx.py`（改写后） | ✓ 两条硬门全过；Transpose 2 → **0** |
+| `converter_lite --fp16=off` | ✓ `CONVERT RESULT SUCCESS:0`，36,675,600 B |
+| PC 侧参考（`veh_ref.py --ref`） | ✓ 5 框，主检出 car@0.9355 |
+| App 构建（native + ArkTS） | ✓ 无编译错误；`.so` 含 `LprVehicleDetect` / `vehicleDetectAsync` |
+| 华为签名 | ✓ 信任根 `Huawei CBG Developer Relations CA G2` |
+| 装机 | ✓ `install bundle successfully` |
+| **真机侧对照（T2 票面验收）** | ✓ **5/5 全配对**；坐标最大偏差 0.0000 px、分数 1.73e-06、最小 IOU 0.999998 |
+| 端侧可复现性 | ✓ 同图两轮推理逐元素一致 |
+| `tools/verify_published_numbers.py` | ✓ 全部 67 项通过 |
+| `tools/scan_for_publication.py` | ✓ 0 阻断（1 项文本待确认：论文里的联系邮箱） |
+
+## 九·补二、T3 实施记录（2026-09-22）
+
+### 做了什么
+
+**native（`lpr_pipeline.{h,cpp}`）**
+
+| 接口 | 作用 |
+|---|---|
+| `RoiRect` / `LprRoiFromBox(box, imgW, imgH, expand)` | 由车框算 ROI：按框**自身宽高**的 `expand` 倍外扩，**向外取整**（左/上 `floor`、右/下 `ceil`），再 clamp 到图内 |
+| `RoiRect::ContainsBox(box)` | ROI 是否覆盖 **(车框 ∩ 图)** —— 车框可以超出图边界，要盖的是交集 |
+| `LprCropRoi(src, roi, out, err)` | 纯逐行 `memcpy`，**无插值、无格式转换** ⇒ 像素与源图逐字节相同 |
+| `LprRoiMapRect` / `LprRoiUnmapRect` / `LprRoiMapRects` | ROI 局部坐标 ⇄ 源图坐标 |
+| `LprRgbSum(img)` | RGB 之和（跳过 alpha），与 `PlateResult::cropSum` **同口径** |
+| `LprRoiSelfTest(img)` | 25 条设备侧单元断言，逐行报告 |
+
+**NAPI**：`roiSelfTestAsync(rgba,w,h)`、`roiPlateProbeAsync(vehId,detId,recId,clsId,rgba,w,h,boxIdx?,expand?)`，均走 `*Async`。
+**ArkTS**：探针台加「ROI 自证」「ROI 探针」两个按钮。
+**PC 侧判据**：`_veh/roi_selftest_check.py`（几何 + 像素双重复核）、`_veh/roi_probe_check.py`（映射是否偏移）。
+**驱动工具**：`_veh/dev.py`（`state`/`layout`/`struct`/`start`/`tap`/`log`/`ps`），用 Python 取回 hdc 输出。
+
+### 关键设计：向外取整
+
+`floor` 左/上、`ceil` 右/下。向内取整会切掉车框边线上的像素，而车牌经常贴着框的边线 ——
+这是"少一个像素就丢一块牌"的地方。设备侧用例 `roi-round-outward` 专门钉这一点：
+小数框 `(30.4,40.6,130.4,140.6)` 在 15% 外扩下必须是 `15,25,131,131`；
+向内取整会给 `15,25,130,130`，断言会红。
+
+### 验收证据
+
+**一、ROI 裁剪与坐标映射（25/25，设备侧断言 + PC 侧独立重算）**
+
+```
+[t3check] 整图 rgbSum 设备=66637791 PC=66637791 ✓
+[t3check] ✓ crop-interior-bytes  几何: PC 重算一致; rgbSum=25501141 ✓(PC 重算一致)
+[t3check] ✓ crop-clamped-bytes   几何: PC 重算一致; rgbSum=21232457 ✓(PC 重算一致)
+[t3check] 设备侧 ok=1 的 case: 25 / 25
+[t3check] ✓ T3 自证通过：几何与像素两项都由 PC 侧独立重算确认
+```
+
+**两重独立**：几何由 Python `math` 重算（与 C++ 是两份实现）；像素由 numpy 从同一张 PNG
+重算区域 RGB 和，与设备报的 `rgbSum` 比。**不是同一条代码自说自话。**
+
+**二、ROI 路径 → 车牌检测 → 映射回原图（`_veh/t3_probe.txt`）**
+
+```
+[t3probe] boxIdx=0 direct=1 veh=5 roi=(0,47,279,156) coversBox=1 expand=0.1500 roiPlates=1
+[t3probe] ✓ boxIdx=0 roiPlate#0 rect=107|114|170|130 score=0.8557 directJ=0 IoU=0.8750 code=浙AG557A
+[t3probe]   直检对应 direct#0 rect=107,113,171,131 score=0.870800 code=浙AG557A
+```
+
+⇒ ROI 路径映射回来的框与**整图直检**框重合（IoU **0.875**），且两侧读出**同一块牌** `浙AG557A`。
+各边最多差 1 px —— 因为 ROI 改变了 letterbox 几何（`r`/`left`/`top` 不同），
+检测器的亚像素落点会略移，这是预期的，不是映射错。
+
+### 覆盖缺口（如实记，不粉饰）
+
+**x 方向偏移没有被端到端覆盖。** 本素材里唯一能检出车牌的车框贴着左边缘，
+`LprRoiFromBox` 把它 clamp 成 `x0 = 0` —— 这时"忘了加 `x0`"与"映射正确"结果**完全一样**。
+`boxIdx=4` 那个框虽然 `roiX0 = 16 > 0`，但它（远处卡车）检不出车牌。
+
+**为什么仍可判定覆盖充分**：端到端只需证明"映射这一步真的被调用了"，而 y 方向
+47 px 的偏移已经证明了这一点（IoU 0.875 而非 0）；`LprRoiMapRect` 的 x/y 两个分量
+由设备侧单元用例钉死（`map-int` → `85,85,95,95`、`map-float` → `86.5,…`、
+`map-vehicleboxes` → `85/90/100`，都带 x 偏移 85）。**残余风险仅为"x 那一行单独写错"**，
+而那三条例外已经把 x 那一行锁住了。
+
+### 踩到的坑（都已在代码/脚本注释里留痕）
+
+1. **车辆检测器 ≠ 车牌检测器**。探针第一版把 `s.det`（y5fu_320x 车牌检测器）当车辆模型传给
+   `LprVehicleDetect`，设备上报 `yolov5u 期望单输出，实际 3`（那是车牌检测器的 3 个 head）。
+   两个模型必须分别持有会话 id（`vehId` vs `detId`）。**这个 bug 是探针自己抓出来的。**
+2. **反向用例不能"随便缩一点"**。`cover-negative` 第一版把 ROI 缩 1 px 就断言"覆盖性必须变假"，
+   实测 `ok=0` —— ROI 有 15% 外扩余量（每边 15 px），缩 1 px 仍然盖得住。
+   缩到 `x0+w < ceil(box x2)` 才构成反例。**断言"必须能失败"这条纪律救了它**：
+   否则一个恒真的谓词会安静地通过。
+3. **日志与返回串的字段名是两套**。hilog 里是紧凑写法（`roi=x,y,w,h`、`direct=`、`roiPlates=`），
+   NAPI 返回串里是 `roiX0`/`directCount`/`roiCount`。PC 判据脚本只认一种就会把字段读成 `None`，
+   然后对着一堆 `None` 报"未覆盖"—— 看着像实现有问题，其实是解析问题。
+4. **`SP8C00E120R7P5` 触发发布门禁**。它是 HarmonyOS 的 SP 版本串（不是序列号），
+   但 `scan_for_publication.py` 按"字母数字混合的设备标识"判阻断。
+   已从 spec 与 GitHub 评论里清掉 —— 去掉它不影响可复现性（`MIA-AL00` + `6.1.0.135` + API 24 已足够）。
+   **教训：往文档里贴设备版本串之前先想一下门禁。**
+
+### 门禁
+
+| 项 | 结果 |
+|---|---|
+| `_veh/roi_selftest_check.py` | ✓ 设备 25/25 + PC 侧几何/像素独立复核一致 |
+| `_veh/roi_probe_check.py` | ✓ IoU 0.875、车牌串逐字符一致 |
+| App 构建 / 华为签名 / 装机 | ✓（`SignHap` 仍是已知 CLI 限制） |
+| `tools/verify_published_numbers.py` | ✓ 67/67 |
+| `tools/scan_for_publication.py` | ✓ 0 阻断（1 项文本待确认：论文联系邮箱） |
 
 ## 十、下一步
 
