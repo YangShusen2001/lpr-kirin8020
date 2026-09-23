@@ -37,6 +37,12 @@ paper/en/preview/
 *.onnx
 *.ncnn.bin
 
+# --- 环境变量 / 凭据（永不入库）---
+.env
+.env.*
+*.key
+*.pem
+
 # --- 系统 ---
 Thumbs.db
 desktop.ini
