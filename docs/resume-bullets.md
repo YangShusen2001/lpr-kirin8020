@@ -6,7 +6,7 @@
 >
 > **使用原则**：每个数字都必须能在面试中当场复现，且与论文、README、网页**同源** ——
 > 全部取自 [`docs/evidence-index.md`](evidence-index.md)，
-> 由 `lpr-kirin8020-app/tools/verify_published_numbers.py` 机检（60 项）。
+> 由 `lpr-kirin8020-app/tools/verify_published_numbers.py` 机检（91 项）。
 >
 > **禁止出现在任何出口的数字**：NPU 利用率（平台不暴露，ADR-0003）。
 
